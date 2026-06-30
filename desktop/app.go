@@ -28,6 +28,7 @@ type App struct {
 	ctx       context.Context
 	write     writeManager
 	plan      planManager
+	review    reviewManager
 	coach     coachManager
 	revise    reviseManager
 	selection selectionManager
@@ -39,6 +40,7 @@ func NewApp() *App {
 	a := &App{}
 	a.write = *newWriteManager(a)
 	a.plan = *newPlanManager(a)
+	a.review = *newReviewManager(a)
 	a.coach = *newCoachManager(a)
 	a.revise = *newReviseManager(a)
 	a.selection = *newSelectionManager(a)

@@ -62,10 +62,10 @@ func BuildHealth(p *project.Project, st *store.Store) HealthReport {
 		if _, err := os.Stat(p.ReviewPath(rep.CurrentChapter)); err != nil {
 			h.Todos = append(h.Todos, TodoItem{
 				ID:          fmt.Sprintf("missing_review_%d", rep.CurrentChapter),
-				Label:       fmt.Sprintf("查看第 %d 章审查", rep.CurrentChapter),
-				Detail:      "上一章尚未完成审查流程",
+				Label:       fmt.Sprintf("审查第 %d 章", rep.CurrentChapter),
+				Detail:      "写章后建议完成 AI 质量审查",
 				Severity:    "warn",
-				Action:      "open_chapter_review",
+				Action:      "review_chapter",
 				ActionParam: fmt.Sprint(rep.CurrentChapter),
 			})
 		}

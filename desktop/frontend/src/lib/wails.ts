@@ -151,6 +151,25 @@ export interface VolumeOutlineDTO {
   exists: boolean;
 }
 
+export interface StartReviewInput {
+  chapter: number;
+}
+
+export interface ReviewJobInfo {
+  id: string;
+  chapter: number;
+  status: string;
+}
+
+export interface ReviewReportDTO {
+  stage: string;
+  status: string;
+  summary: string;
+  artifacts?: string[];
+  issues?: string[];
+  next_steps?: string[];
+}
+
 export interface MemoryDTO {
   id: string;
   category: string;
@@ -406,6 +425,9 @@ interface AppBindings {
   CancelPlanVolume(jobID: string): Promise<void>;
   IsPlanRunning(): Promise<boolean>;
   RebuildProjectIndex(): Promise<void>;
+  StartReviewChapter(input: StartReviewInput): Promise<ReviewJobInfo>;
+  CancelReviewChapter(jobID: string): Promise<void>;
+  IsReviewRunning(): Promise<boolean>;
   ListMemories(): Promise<MemoryDTO[]>;
   ListForeshadows(status: string): Promise<ForeshadowDTO[]>;
   SendChapterCoachMessage(chapter: number, message: string): Promise<void>;

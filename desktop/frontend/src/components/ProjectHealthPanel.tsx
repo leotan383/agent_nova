@@ -13,7 +13,7 @@ type Props = {
   onPlanVolume: (volume: number) => void;
   onOpenWrite: (chapter?: number) => void;
   onRebuildIndex: () => Promise<void>;
-  onOpenChapterReview: (chapter: number) => void;
+  onReviewChapter: (chapter: number) => void;
   refreshKey?: number;
 };
 
@@ -27,7 +27,7 @@ export default function ProjectHealthPanel({
   onPlanVolume,
   onOpenWrite,
   onRebuildIndex,
-  onOpenChapterReview,
+  onReviewChapter,
   refreshKey = 0,
 }: Props) {
   const [health, setHealth] = useState<ProjectHealthDTO | null>(null);
@@ -67,8 +67,11 @@ export default function ProjectHealthPanel({
           await onRebuildIndex();
           await load();
           break;
+        case "review_chapter":
+          onReviewChapter(parseInt(todo.action_param || "1", 10) || 1);
+          break;
         case "open_chapter_review":
-          onOpenChapterReview(parseInt(todo.action_param || "1", 10) || 1);
+          onReviewChapter(parseInt(todo.action_param || "1", 10) || 1);
           break;
         default:
           break;
@@ -86,8 +89,10 @@ export default function ProjectHealthPanel({
         return "去写作";
       case "rebuild_index":
         return "重建索引";
+      case "review_chapter":
+        return "开始审查";
       case "open_chapter_review":
-        return "查看审查";
+        return "开始审查";
       default:
         return "";
     }

@@ -67,6 +67,7 @@ export default function StudioPage() {
   const [chapterRefreshKey, setChapterRefreshKey] = useState(0);
   const [healthRefreshKey, setHealthRefreshKey] = useState(0);
   const [planFocusVolume, setPlanFocusVolume] = useState<number | null>(null);
+  const [autoReviewChapter, setAutoReviewChapter] = useState<number | null>(null);
 
   const loadStudio = useCallback(async () => {
     setError("");
@@ -123,6 +124,7 @@ export default function StudioPage() {
     if (tab === "chapters" && selectedChapter === num && chapterDocTab === docKind) return;
     const ok = await confirmUnsavedLeave();
     if (!ok) return;
+    setAutoReviewChapter((prev) => (prev === num && docKind === "review" ? prev : null));
     loadChapter(num, docKind);
   };
 
@@ -190,6 +192,19 @@ export default function StudioPage() {
   const handlePlanComplete = () => {
     setHealthRefreshKey((k) => k + 1);
     loadStudio();
+  };
+
+  const requestReviewChapter = async (num: number) => {
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
+    setAutoReviewChapter(num);
+    loadChapter(num, "review");
+  };
+
+  const handleReviewComplete = () => {
+    setAutoReviewChapter(null);
+    setHealthRefreshKey((k) => k + 1);
+    refreshChapterView();
   };
 
   const clearSearchReturn = () => {
@@ -483,7 +498,7 @@ export default function StudioPage() {
                 onPlanVolume={focusPlanVolume}
                 onOpenWrite={goToWrite}
                 onRebuildIndex={handleRebuildIndex}
-                onOpenChapterReview={(num) => void guardedLoadChapter(num, "review")}
+                onReviewChapter={(num) => void requestReviewChapter(num)}
               />
               <VolumePlanPanel
                 suggestedVolume={status.current_volume || 1}
@@ -547,7 +562,9 @@ export default function StudioPage() {
                       key={`${selectedChapter}-${chapterRefreshKey}`}
                       chapter={selectedChapter}
                       initialTab={chapterDocTab}
+                      autoStartReview={autoReviewChapter === selectedChapter}
                       onSaved={refreshChapterView}
+                      onReviewComplete={handleReviewComplete}
                     />
                   ) : (
                     <p className="flex h-full items-center justify-center text-studio-muted/70">

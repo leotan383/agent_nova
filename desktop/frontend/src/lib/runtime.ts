@@ -72,3 +72,9 @@ export const PLAN_EVENTS = {
   done: "plan:done",
   error: "plan:error",
 } as const;
+
+export const REVIEW_EVENTS = {
+  status: "review:status",
+  done: "review:done",
+  error: "review:error",
+} as const;

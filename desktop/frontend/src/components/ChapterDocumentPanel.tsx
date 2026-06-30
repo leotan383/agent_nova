@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
-import { ChapterDocDTO, app } from "../lib/wails";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ClipboardCheck, Loader2, Square } from "lucide-react";
+import { REVIEW_EVENTS, eventsOn } from "../lib/runtime";
+import { ChapterDocDTO, ReviewReportDTO, app } from "../lib/wails";
 import { confirmUnsavedLeave } from "../lib/unsavedGuard";
 import MarkdownEditor from "./MarkdownEditor";
 
@@ -15,10 +16,18 @@ const TABS: { kind: DocKind; label: string }[] = [
 type Props = {
   chapter: number;
   initialTab?: DocKind;
+  autoStartReview?: boolean;
   onSaved?: () => void;
+  onReviewComplete?: () => void;
 };
 
-export default function ChapterDocumentPanel({ chapter, initialTab = "body", onSaved }: Props) {
+export default function ChapterDocumentPanel({
+  chapter,
+  initialTab = "body",
+  autoStartReview = false,
+  onSaved,
+  onReviewComplete,
+}: Props) {
   const [tab, setTab] = useState<DocKind>(initialTab);
   const [docs, setDocs] = useState<Record<DocKind, ChapterDocDTO | null>>({
     body: null,
@@ -28,6 +37,14 @@ export default function ChapterDocumentPanel({ chapter, initialTab = "body", onS
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [hasKey, setHasKey] = useState(true);
+  const [jobId, setJobId] = useState("");
+  const [jobStatus, setJobStatus] = useState("");
+  const [jobMessage, setJobMessage] = useState("");
+  const [reviewReport, setReviewReport] = useState<ReviewReportDTO | null>(null);
+  const [reviewRunning, setReviewRunning] = useState(false);
+  const jobIdRef = useRef("");
+  const autoReviewStartedRef = useRef(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -48,8 +65,87 @@ export default function ChapterDocumentPanel({ chapter, initialTab = "body", onS
 
   useEffect(() => {
     setTab(initialTab);
+    autoReviewStartedRef.current = false;
     loadAll();
   }, [chapter, initialTab, loadAll]);
+
+  useEffect(() => {
+    app()
+      .HasAPIKey()
+      .then(setHasKey)
+      .catch(() => setHasKey(false));
+  }, []);
+
+  useEffect(() => {
+    const match = (id?: string) => !jobIdRef.current || id === jobIdRef.current;
+    const unsubs = [
+      eventsOn(REVIEW_EVENTS.status, (p) => {
+        if (p.chapter !== chapter || !match(p.job_id)) return;
+        setJobStatus(p.status || "");
+        setJobMessage(p.message || "");
+        setReviewRunning(p.status === "pending" || p.status === "running");
+      }),
+      eventsOn(REVIEW_EVENTS.done, (p) => {
+        if (p.chapter !== chapter || !match(p.job_id)) return;
+        setReviewRunning(false);
+        setJobStatus("done");
+        if (p.report) {
+          try {
+            setReviewReport(JSON.parse(p.report) as ReviewReportDTO);
+          } catch {
+            setReviewReport(null);
+          }
+        }
+        void loadAll().then(() => {
+          setTab("review");
+          onReviewComplete?.();
+        });
+      }),
+      eventsOn(REVIEW_EVENTS.error, (p) => {
+        if (p.chapter !== chapter || !match(p.job_id)) return;
+        setReviewRunning(false);
+        setJobStatus("failed");
+        setError(p.error || "审查失败");
+      }),
+    ];
+    return () => unsubs.forEach((u) => u());
+  }, [chapter, loadAll, onReviewComplete]);
+
+  const startReview = useCallback(async () => {
+    if (!docs.body?.exists) {
+      setError("请先完成本章正文再审查");
+      return;
+    }
+    setError("");
+    setReviewReport(null);
+    setJobMessage("");
+    try {
+      const job = await app().StartReviewChapter({ chapter });
+      jobIdRef.current = job.id;
+      setJobId(job.id);
+      setJobStatus(job.status);
+      setReviewRunning(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [chapter, docs.body?.exists]);
+
+  useEffect(() => {
+    if (!autoStartReview || autoReviewStartedRef.current || loading || reviewRunning) return;
+    autoReviewStartedRef.current = true;
+    void startReview();
+  }, [autoStartReview, loading, reviewRunning, startReview]);
+
+  const cancelReview = async () => {
+    if (!jobId) return;
+    try {
+      await app().CancelReviewChapter(jobId);
+      setReviewRunning(false);
+      setJobStatus("cancelled");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const current = docs[tab];
 
@@ -84,36 +180,82 @@ export default function ChapterDocumentPanel({ chapter, initialTab = "body", onS
     );
   }
 
+  const bodyReady = docs.body?.exists;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 gap-1 border-b border-studio-border px-3 py-2">
-        {TABS.map(({ kind, label }) => {
-          const exists = docs[kind]?.exists;
-          return (
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-studio-border px-3 py-2">
+        <div className="flex gap-1">
+          {TABS.map(({ kind, label }) => {
+            const exists = docs[kind]?.exists;
+            return (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => switchDocTab(kind)}
+                className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                  tab === kind
+                    ? "bg-studio-accent/15 text-studio-accent"
+                    : "text-studio-muted hover:bg-studio-bg hover:text-studio-text"
+                }`}
+              >
+                {label}
+                {!exists && kind !== "body" && (
+                  <span className="ml-1 text-studio-muted/50">·</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {reviewRunning ? (
+            <>
+              <span className="inline-flex items-center gap-1.5 text-xs text-studio-muted">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-studio-accent" />
+                {jobMessage || "正在审查…"}
+              </span>
+              <button
+                type="button"
+                onClick={() => void cancelReview()}
+                className="inline-flex items-center gap-1 rounded-lg border border-studio-border px-2.5 py-1 text-xs hover:bg-studio-bg"
+              >
+                <Square className="h-3 w-3" />
+                取消
+              </button>
+            </>
+          ) : (
             <button
-              key={kind}
               type="button"
-              onClick={() => switchDocTab(kind)}
-              className={`rounded-lg px-3 py-1.5 text-xs transition ${
-                tab === kind
-                  ? "bg-studio-accent/15 text-studio-accent"
-                  : "text-studio-muted hover:bg-studio-bg hover:text-studio-text"
-              }`}
+              onClick={() => void startReview()}
+              disabled={!hasKey || !bodyReady}
+              title={!bodyReady ? "需要先有正文" : undefined}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-studio-accent px-3 py-1.5 text-xs font-medium text-studio-on-accent hover:brightness-110 disabled:opacity-50"
             >
-              {label}
-              {!exists && kind !== "body" && (
-                <span className="ml-1 text-studio-muted/50">·</span>
-              )}
+              <ClipboardCheck className="h-3.5 w-3.5" />
+              {docs.review?.exists ? "重新审查" : "AI 审查"}
             </button>
-          );
-        })}
+          )}
+        </div>
       </div>
+
+      {!hasKey && (
+        <div className="mx-3 mt-2 shrink-0 studio-alert-error-compact">
+          请先在设置中配置 API Key 后再使用 AI 审查。
+        </div>
+      )}
 
       {error && <div className="mx-3 mt-2 shrink-0 studio-alert-error-compact">{error}</div>}
 
-      {tab !== "body" && current && !current.exists && (
+      {reviewReport && !reviewRunning && jobStatus === "done" && (
+        <div className="mx-3 mt-2 shrink-0 rounded-lg border border-[rgb(var(--studio-diff-add-border))] bg-[rgb(var(--studio-diff-add-bg))] px-3 py-2 text-sm text-[rgb(var(--studio-diff-add-stat))]">
+          {reviewReport.summary}
+        </div>
+      )}
+
+      {tab !== "body" && current && !current.exists && !reviewRunning && (
         <p className="shrink-0 px-4 py-2 text-xs text-studio-muted">
-          暂无{tab === "review" ? "审查报告" : "摘要"}，可在编辑模式下新建并保存。
+          暂无{tab === "review" ? "审查报告" : "摘要"}，可点击「AI 审查」生成，或在编辑模式下手动新建并保存。
         </p>
       )}
 
