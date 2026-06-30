@@ -68,7 +68,11 @@ func (w *SelectionWorkflow) TransformSelection(
 	userPrompt += "\n\n请只输出修改后的片段正文，不要解释，不要用代码块或引号包裹。"
 
 	out, err := w.Agent.Run(ctx, agent.RunInput{
-		SystemPrompt: prompts.SelectionTransformSystem(p.Meta.Title, chapter, action),
+		SystemPrompt: prompts.SelectionTransformSystem(prompts.BookContext{
+			Title: p.Meta.Title, Genre: p.Meta.Genre, Style: p.Meta.WritingStyle(),
+			Protagonist: p.Meta.Protagonist, Cheat: p.Meta.Cheat, Synopsis: p.Meta.Synopsis,
+			Chapter: chapter, Volume: p.Meta.CurrentVolume,
+		}, action),
 		UserPrompt:   userPrompt,
 		Stream:       onDelta != nil,
 		OnDelta:      onDelta,

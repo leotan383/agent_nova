@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/tanlian/agent_nova/internal/project"
+	"github.com/tanlian/agent_nova/internal/prompts"
 	"github.com/tanlian/agent_nova/internal/store"
 )
 
@@ -16,36 +19,50 @@ type Builder struct {
 }
 
 type Snapshot struct {
-	Chapter       int    `json:"chapter"`        // 目标章号
-	Volume        int    `json:"volume"`         // 目标卷号
-	Outline       string `json:"outline"`        // 卷纲/章纲全文（大纲/第NN卷.md）
-	RecentSummary string `json:"recent_summary"` // 近 N 章摘要链
-	Settings      string `json:"settings"`       // 设定集摘要（截断后）
-	Memories      string `json:"memories"`       // 长期记忆 Top-K 拼接文本
-	FTSHits       string `json:"fts_hits"`       // FTS 检索命中的章节/设定片段
+	Chapter         int    `json:"chapter"`
+	Volume          int    `json:"volume"`
+	BookAnchor      string `json:"book_anchor"`
+	ChapterOutline  string `json:"chapter_outline"`  // 从卷纲中提取的本章段落
+	VolumeOutline   string `json:"volume_outline"`   // 卷纲全文（可能截断）
+	RecentSummary   string `json:"recent_summary"`
+	Settings        string `json:"settings"`
+	Memories        string `json:"memories"`
+	OpenForeshadows string `json:"open_foreshadows"`
+	FTSHits         string `json:"fts_hits"`
 }
 
-// Build 组装写章上下文快照，供 ContextAgent / WriteAgent 注入 prompt。
+// Build 组装写章上下文快照。
+// 策略：书籍锚点 → system prompt；本章章纲 + 动态事实 → user prompt 靠前位置。
 func (b *Builder) Build(chapter, volume int) (*Snapshot, error) {
 	if volume <= 0 {
 		volume = 1
 	}
 	snap := &Snapshot{Chapter: chapter, Volume: volume}
 
-	// 卷纲：本章所属卷的大纲与章纲（大纲/第NN卷.md）
+	anchor := prompts.BookContext{
+		Title:       b.Proj.Meta.Title,
+		Genre:       b.Proj.Meta.Genre,
+		Style:       b.Proj.Meta.WritingStyle(),
+		Protagonist: b.Proj.Meta.Protagonist,
+		Cheat:       b.Proj.Meta.Cheat,
+		Synopsis:    b.Proj.Meta.Synopsis,
+		Chapter:     chapter,
+		Volume:      volume,
+	}
+	snap.BookAnchor = prompts.BookAnchor(anchor)
+
 	volPath := b.Proj.VolumeOutlinePath(volume)
 	if data, err := os.ReadFile(volPath); err == nil {
-		snap.Outline = string(data)
+		full := string(data)
+		snap.ChapterOutline = extractChapterOutline(full, chapter)
+		snap.VolumeOutline = truncateRunes(full, 4000)
 	}
 
-	// 近章摘要链：向前取最多 3 章 summary，保证长篇连贯性
 	snap.RecentSummary = b.recentSummaries(chapter, 3)
-
-	// 设定摘要：设定集/*.md 截断至 800 字，控制 token 预算
 	snap.Settings = b.settingsDigest()
+	snap.OpenForeshadows = b.openForeshadows()
 
 	if b.Store != nil {
-		// 长期记忆 Top-10：写前注入已沉淀的可复用知识
 		memories, _ := b.Store.QueryMemories("", "", 10)
 		var parts []string
 		for _, m := range memories {
@@ -53,13 +70,79 @@ func (b *Builder) Build(chapter, volume int) (*Snapshot, error) {
 		}
 		snap.Memories = strings.Join(parts, "\n")
 
-		// FTS 检索：按章号关键词召回相关章节/设定片段
 		hits, _ := b.Store.SearchFTS(fmt.Sprintf("第%d", chapter), 5)
 		for _, h := range hits {
 			snap.FTSHits += fmt.Sprintf("%s: %s\n", h["kind"], h["snippet"])
 		}
 	}
 	return snap, nil
+}
+
+// BookContext 返回供 system prompt 使用的书籍锚点结构。
+func (b *Builder) BookContext(chapter, volume int) prompts.BookContext {
+	if volume <= 0 {
+		volume = 1
+	}
+	return prompts.BookContext{
+		Title:       b.Proj.Meta.Title,
+		Genre:       b.Proj.Meta.Genre,
+		Style:       b.Proj.Meta.WritingStyle(),
+		Protagonist: b.Proj.Meta.Protagonist,
+		Cheat:       b.Proj.Meta.Cheat,
+		Synopsis:    b.Proj.Meta.Synopsis,
+		Chapter:     chapter,
+		Volume:      volume,
+	}
+}
+
+// ToContextPrompt 供 ContextAgent 生成任务书（参考材料，不含书籍锚点）。
+func (s *Snapshot) ToContextPrompt() string {
+	return fmt.Sprintf(`# 写作参考材料
+
+## 目标
+第 %d 章（第 %d 卷）
+
+## 本章章纲（优先执行）
+%s
+
+## 近章摘要（衔接事实，不可矛盾）
+%s
+
+## 设定摘要
+%s
+
+## Open 伏笔（可择机回收，勿提前剧透无关伏笔）
+%s
+
+## 长期记忆
+%s
+
+## 检索命中
+%s
+`, s.Chapter, s.Volume,
+		fallback(s.ChapterOutline, "（未找到本章章纲，请参考卷纲）\n"+truncateRunes(s.VolumeOutline, 2000)),
+		fallback(s.RecentSummary, "（暂无前章摘要）"),
+		fallback(s.Settings, "（暂无设定摘要）"),
+		fallback(s.OpenForeshadows, "（暂无 open 伏笔）"),
+		fallback(s.Memories, "（暂无记忆）"),
+		fallback(s.FTSHits, "（无检索命中）"),
+	)
+}
+
+// ToPrompt 完整上下文（CLI 展示用）。
+func (s *Snapshot) ToPrompt() string {
+	return s.BookAnchor + "\n\n---\n\n" + s.ToContextPrompt()
+}
+
+// ToWriteUserPrompt 供 WriteAgent：任务书 + 参考材料（书籍锚点已在 system）。
+func (s *Snapshot) ToWriteUserPrompt(taskBook string) string {
+	return fmt.Sprintf(`# 写作任务书（必须严格执行）
+
+%s
+
+---
+
+%s`, strings.TrimSpace(taskBook), s.ToContextPrompt())
 }
 
 func (b *Builder) recentSummaries(beforeChapter, n int) string {
@@ -75,8 +158,31 @@ func (b *Builder) recentSummaries(beforeChapter, n int) string {
 	return strings.Join(parts, "\n\n")
 }
 
-func (b *Builder) settingsDigest() string {
+func (b *Builder) openForeshadows() string {
+	if b.Store == nil {
+		return ""
+	}
+	fs, err := b.Store.ListForeshadows("open")
+	if err != nil || len(fs) == 0 {
+		return ""
+	}
 	var parts []string
+	for _, f := range fs {
+		parts = append(parts, fmt.Sprintf("- [%s] 第%d章埋设：%s", f.ID, f.PlantedChapter, f.Description))
+	}
+	return strings.Join(parts, "\n")
+}
+
+var settingsPriority = []string{"主角", "世界观", "力量", "金手指", "反派", "设定"}
+
+func (b *Builder) settingsDigest() string {
+	type item struct {
+		path    string
+		content string
+		priority int
+	}
+	var items []item
+
 	_ = filepath.Walk(b.Proj.SettingsDir(), func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
 			return err
@@ -86,35 +192,84 @@ func (b *Builder) settingsDigest() string {
 			return err
 		}
 		rel, _ := filepath.Rel(b.Proj.Root, path)
-		content := string(data)
-		if len([]rune(content)) > 800 {
-			content = string([]rune(content)[:800]) + "..."
+		base := filepath.Base(path)
+		pri := len(settingsPriority) + 1
+		for i, kw := range settingsPriority {
+			if strings.Contains(base, kw) {
+				pri = i
+				break
+			}
 		}
-		parts = append(parts, fmt.Sprintf("### %s\n%s", rel, content))
+		items = append(items, item{
+			path: rel, content: truncateRunes(string(data), 800), priority: pri,
+		})
 		return nil
 	})
+
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].priority != items[j].priority {
+			return items[i].priority < items[j].priority
+		}
+		return items[i].path < items[j].path
+	})
+
+	var parts []string
+	total := 0
+	const maxTotal = 3500
+	for _, it := range items {
+		block := fmt.Sprintf("### %s\n%s", it.path, it.content)
+		blockLen := len([]rune(block))
+		if total+blockLen > maxTotal {
+			break
+		}
+		parts = append(parts, block)
+		total += blockLen
+	}
 	return strings.Join(parts, "\n\n")
 }
 
-func (s *Snapshot) ToPrompt() string {
-	return fmt.Sprintf(`# 写作上下文
+var chapterHeaderRe = regexp.MustCompile(`(?m)^#{1,4}\s*第\s*0*(\d+)\s*章`)
 
-## 目标章节
-第 %d 章（第 %d 卷）
+func extractChapterOutline(full string, chapter int) string {
+	if full == "" {
+		return ""
+	}
+	matches := chapterHeaderRe.FindAllStringSubmatchIndex(full, -1)
+	if len(matches) == 0 {
+		return truncateRunes(full, 1500)
+	}
+	target := -1
+	for i, loc := range matches {
+		num := full[loc[2]:loc[3]]
+		var n int
+		fmt.Sscanf(num, "%d", &n)
+		if n == chapter {
+			target = i
+			break
+		}
+	}
+	if target < 0 {
+		return truncateRunes(full, 1500)
+	}
+	start := matches[target][0]
+	end := len(full)
+	if target+1 < len(matches) {
+		end = matches[target+1][0]
+	}
+	return strings.TrimSpace(full[start:end])
+}
 
-## 章纲/卷纲
-%s
+func truncateRunes(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "…"
+}
 
-## 近章摘要
-%s
-
-## 设定摘要
-%s
-
-## 长期记忆
-%s
-
-## 检索命中
-%s
-`, s.Chapter, s.Volume, s.Outline, s.RecentSummary, s.Settings, s.Memories, s.FTSHits)
+func fallback(s, def string) string {
+	if strings.TrimSpace(s) != "" {
+		return s
+	}
+	return def
 }

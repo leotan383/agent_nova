@@ -80,21 +80,20 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 
 	// Step 1: 起草 — ContextAgent 任务书 → WriteAgent 正文
 	if startStep == "draft" {
+		anchor := cb.BookContext(opts.Chapter, opts.Volume)
 		emit("taskbook", "生成写作任务书")
-		// 调用 ContextAgent 生成写作任务书
 		taskBook, err := w.Agent.Run(ctx, agent.RunInput{
-			SystemPrompt: prompts.ContextSystem(),
-			UserPrompt:   snap.ToPrompt() + "\n请输出写作任务书。",
+			SystemPrompt: prompts.ContextSystem(anchor),
+			UserPrompt:   snap.ToContextPrompt() + "\n请输出写作任务书。",
 		})
 		if err != nil {
 			return nil, err
 		}
 
 		emit("draft", "起草正文")
-		// 调用 WriteAgent 生成正文
 		content, err = w.Agent.Run(ctx, agent.RunInput{
-			SystemPrompt: prompts.WriteSystem(),
-			UserPrompt:   taskBook + "\n\n" + snap.ToPrompt(),
+			SystemPrompt: prompts.WriteSystem(anchor),
+			UserPrompt:   snap.ToWriteUserPrompt(taskBook),
 			Stream:       opts.Stream,
 			OnDelta:      opts.OnDelta,
 		})
@@ -119,11 +118,22 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 
 	// Step 2: 审查 + 润色 — 内置轻量 review pass，覆盖正文文件
 	if startStep == "review" || startStep == "polish" {
+		anchor := cb.BookContext(opts.Chapter, opts.Volume)
 		emit("review", "审查并润色")
-		// 调用 ReviewAgent 审查正文
+		outlineRef := snap.ChapterOutline
+		if outlineRef == "" {
+			outlineRef = snap.VolumeOutline
+		}
 		reviewed, err := w.Agent.Run(ctx, agent.RunInput{
-			SystemPrompt: prompts.ReviewSystem(),
-			UserPrompt:   fmt.Sprintf("请审查以下章节正文，输出问题清单后给出润色版全文：\n\n%s", content),
+			SystemPrompt: prompts.ReviewSystem(anchor),
+			UserPrompt: fmt.Sprintf(`【本章章纲】
+%s
+
+【Open 伏笔】
+%s
+
+【正文】
+%s`, outlineRef, snap.OpenForeshadows, content),
 		})
 		if err != nil {
 			ledger.Record("review", "failed", err.Error())
@@ -248,8 +258,13 @@ func (w *ReviewWorkflow) ReviewChapter(ctx context.Context, p *project.Project, 
 		return &report.Report{Stage: "审查", Status: report.StatusFailed, Summary: fmt.Sprintf("第 %d 章正文不存在", chapter)}, nil
 	}
 	settings := readDirConcat(p.SettingsDir())
+	anchor := prompts.BookContext{
+		Title: p.Meta.Title, Genre: p.Meta.Genre, Style: p.Meta.WritingStyle(),
+		Protagonist: p.Meta.Protagonist, Cheat: p.Meta.Cheat, Synopsis: p.Meta.Synopsis,
+		Chapter: chapter, Volume: p.Meta.CurrentVolume,
+	}
 	content, err := w.Agent.Run(ctx, agent.RunInput{
-		SystemPrompt: prompts.ReviewSystem(),
+		SystemPrompt: prompts.ReviewSystem(anchor),
 		UserPrompt:   fmt.Sprintf("设定：\n%s\n\n正文：\n%s", settings, body),
 		Tools:        true,
 	})

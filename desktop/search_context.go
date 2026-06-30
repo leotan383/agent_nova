@@ -84,17 +84,20 @@ func (a *App) GetWriteContext(chapter, volume int) (WriteContextDTO, error) {
 			return err
 		}
 		result = WriteContextDTO{
-			Chapter: snap.Chapter, Volume: snap.Volume, Outline: snap.Outline,
+			Chapter: snap.Chapter, Volume: snap.Volume,
+			Outline:    firstNonEmpty(snap.ChapterOutline, snap.VolumeOutline),
 			RecentSummary: snap.RecentSummary, Settings: snap.Settings,
 			Memories: snap.Memories, FTSHits: snap.FTSHits,
+			OpenForeshadows: snap.OpenForeshadows,
 		}
-		fs, _ := actx.Store.ListForeshadows("open")
-		var parts []string
-		for _, f := range fs {
-			parts = append(parts, fmt.Sprintf("- [第%d章] %s", f.PlantedChapter, f.Description))
-		}
-		result.OpenForeshadows = strings.Join(parts, "\n")
 		return nil
 	})
 	return result, err
+}
+
+func firstNonEmpty(a, b string) string {
+	if strings.TrimSpace(a) != "" {
+		return a
+	}
+	return b
 }

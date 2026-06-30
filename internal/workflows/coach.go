@@ -66,12 +66,20 @@ func truncateCoachRunes(s string, max int) string {
 	return string(runes[:max]) + "\n\n…（正文过长，已截断供讨论）"
 }
 
+func coachAnchor(p *project.Project, chapter int) prompts.BookContext {
+	return prompts.BookContext{
+		Title: p.Meta.Title, Genre: p.Meta.Genre, Style: p.Meta.WritingStyle(),
+		Protagonist: p.Meta.Protagonist, Cheat: p.Meta.Cheat, Synopsis: p.Meta.Synopsis,
+		Chapter: chapter, Volume: p.Meta.CurrentVolume,
+	}
+}
+
 func (w *CoachWorkflow) PrepareCoachMessages(p *project.Project, chapter int) ([]openai.ChatCompletionMessage, error) {
 	body, ctxBlock, err := LoadChapterBundle(p, chapter)
 	if err != nil {
 		return nil, err
 	}
-	sys := prompts.ChapterCoachSystem(p.Meta.Title, chapter)
+	sys := prompts.ChapterCoachSystem(coachAnchor(p, chapter))
 	contextMsg := fmt.Sprintf("以下是需要讨论的章节材料：\n\n%s\n\n---\n\n【正文】\n%s",
 		ctxBlock, truncateCoachRunes(body, maxCoachContextRunes))
 	if ctxBlock == "" {
@@ -124,7 +132,7 @@ func (w *CoachWorkflow) ReviseChapter(ctx context.Context, p *project.Project, c
 
 请输出修改后的完整章节正文。`, transcript, truncateCoachRunes(body, maxCoachContextRunes))
 	return w.Agent.Run(ctx, agent.RunInput{
-		SystemPrompt: prompts.ChapterReviseSystem(p.Meta.Title, chapter),
+		SystemPrompt: prompts.ChapterReviseSystem(coachAnchor(p, chapter)),
 		UserPrompt:   userPrompt,
 		Stream:       onDelta != nil,
 		OnDelta:      onDelta,

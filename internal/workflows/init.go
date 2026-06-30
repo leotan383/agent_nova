@@ -113,7 +113,11 @@ func (w *PlanWorkflow) PlanVolume(ctx context.Context, p *project.Project, vol i
 设定摘要：
 %s`, vol, string(master), settings)
 	content, err := w.Agent.Run(ctx, agent.RunInput{
-		SystemPrompt: prompts.PlanSystem(),
+		SystemPrompt: prompts.PlanSystem(prompts.BookContext{
+			Title: p.Meta.Title, Genre: p.Meta.Genre, Style: p.Meta.WritingStyle(),
+			Protagonist: p.Meta.Protagonist, Cheat: p.Meta.Cheat, Synopsis: p.Meta.Synopsis,
+			Volume: vol,
+		}),
 		UserPrompt:   userPrompt,
 		Tools:        true,
 	})
