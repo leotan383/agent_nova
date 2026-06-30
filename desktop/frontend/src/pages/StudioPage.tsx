@@ -10,6 +10,7 @@ import {
   FileText,
   History,
   LayoutDashboard,
+  Map,
   PenLine,
   Search,
   Settings,
@@ -21,8 +22,7 @@ import MemoryPanel, { MemoryFocus } from "../components/MemoryPanel";
 import WritePanel from "../components/WritePanel";
 import ChapterCoachPanel from "../components/ChapterCoachPanel";
 import ChapterVersionPanel from "../components/ChapterVersionPanel";
-import ProgressPanel from "../components/ProgressPanel";
-import ProjectHealthPanel from "../components/ProjectHealthPanel";
+import OverviewPanel from "../components/OverviewPanel";
 import VolumePlanPanel from "../components/VolumePlanPanel";
 import EntityPanel from "../components/EntityPanel";
 import ExportDialog from "../components/ExportDialog";
@@ -33,7 +33,7 @@ import WikiPanel from "../components/WikiPanel";
 import UnsavedChangesDialog from "../components/UnsavedChangesDialog";
 import { confirmUnsavedLeave, hasUnsavedChanges } from "../lib/unsavedGuard";
 
-type Tab = "overview" | "write" | "chapters" | "memory" | "wiki" | "entities";
+type Tab = "overview" | "planning" | "write" | "chapters" | "memory" | "wiki" | "entities";
 type ChapterDocTab = "body" | "review" | "summary";
 
 type NavSnapshot = {
@@ -178,9 +178,16 @@ export default function StudioPage() {
     setTab("write");
   };
 
-  const focusPlanVolume = (volume: number) => {
-    setPlanFocusVolume(volume);
-    setHealthRefreshKey((k) => k + 1);
+  const goToPlanning = async (volume?: number) => {
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
+    if (volume && volume > 0) setPlanFocusVolume(volume);
+    clearSearchReturn();
+    setTab("planning");
+  };
+
+  const continueWriting = async () => {
+    await goToWrite();
   };
 
   const handleRebuildIndex = async () => {
@@ -288,6 +295,7 @@ export default function StudioPage() {
 
   const navItems = [
     { id: "overview" as Tab, label: "概览", icon: LayoutDashboard },
+    { id: "planning" as Tab, label: "规划", icon: Map },
     { id: "write" as Tab, label: "写作", icon: PenLine },
     { id: "chapters" as Tab, label: "章节", icon: FileText },
     { id: "memory" as Tab, label: "记忆", icon: Brain },
@@ -412,7 +420,7 @@ export default function StudioPage() {
             ))}
           </nav>
           <p className="mt-8 px-3 text-xs leading-relaxed text-studio-muted">
-            状态页查看人物/地点/物品的当前状态；百科查阅设定与大纲；章节页可与改稿顾问讨论。
+            概览查看进度与待办；规划页编辑卷纲；章节页可与改稿顾问讨论。
           </p>
         </aside>
 
@@ -443,59 +451,29 @@ export default function StudioPage() {
 
           {tab === "overview" && status && (
             <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <ProgressPanel status={status} />
-              <StatCard
-                label="已写章节"
-                value={status.chapter_count}
-                accent
-                onClick={status.chapter_count > 0 ? goToChapters : undefined}
-                hint={status.chapter_count > 0 ? "查看章节列表" : undefined}
-              />
-              <StatCard
-                label="当前章号"
-                value={status.current_chapter}
-                onClick={status.current_chapter > 0 ? goToCurrentChapter : undefined}
-                hint={status.current_chapter > 0 ? "阅读当前章" : undefined}
-              />
-              <StatCard
-                label="记忆条目"
-                value={status.memory_count}
-                onClick={status.memory_count > 0 ? goToMemories : undefined}
-                hint={status.memory_count > 0 ? "查看记忆" : undefined}
-              />
-              <StatCard
-                label="Open 伏笔"
-                value={status.open_foreshadows}
-                onClick={status.open_foreshadows > 0 ? goToForeshadows : undefined}
-                hint={status.open_foreshadows > 0 ? "查看 open 伏笔" : undefined}
-              />
-              {status.next_steps && status.next_steps.length > 0 && (
-                <div className="md:col-span-2 xl:col-span-3 rounded-xl border border-studio-border bg-studio-panel p-5">
-                  <h3 className="text-sm font-medium text-studio-muted">建议下一步</h3>
-                  <ul className="mt-3 space-y-2">
-                    {status.next_steps.map((s) => (
-                      <li key={s} className="flex items-center gap-2 text-sm">
-                        <PenLine className="h-4 w-4 shrink-0 text-studio-accent" />
-                        {s}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <ProjectHealthPanel
-                refreshKey={healthRefreshKey}
-                onPlanVolume={focusPlanVolume}
-                onOpenWrite={goToWrite}
+              <OverviewPanel
+                status={status}
+                healthRefreshKey={healthRefreshKey}
+                onContinueWrite={() => void continueWriting()}
+                onOpenPlanning={(vol) => void goToPlanning(vol)}
+                onOpenWrite={() => void goToWrite()}
                 onRebuildIndex={handleRebuildIndex}
                 onReviewChapter={(num) => void requestReviewChapter(num)}
+                onGoToChapters={() => void goToChapters()}
+                onGoToCurrentChapter={() => void goToCurrentChapter()}
+                onGoToMemories={() => void goToMemories()}
+                onGoToForeshadows={() => void goToForeshadows()}
               />
+            </div>
+          )}
+
+          {tab === "planning" && status && (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <VolumePlanPanel
                 suggestedVolume={status.current_volume || 1}
                 focusVolume={planFocusVolume}
                 onComplete={handlePlanComplete}
               />
-            </div>
             </div>
           )}
 
@@ -617,50 +595,5 @@ export default function StudioPage() {
       />
       <UnsavedChangesDialog />
     </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  accent,
-  onClick,
-  hint,
-}: {
-  label: string;
-  value: number;
-  accent?: boolean;
-  onClick?: () => void;
-  hint?: string;
-}) {
-  const clickable = value > 0 && onClick;
-  const inner = (
-    <>
-      <p className="text-xs uppercase tracking-wide text-studio-muted">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold ${accent ? "text-studio-accent" : ""}`}>
-        {value}
-      </p>
-      {clickable && hint && (
-        <p className="mt-2 text-xs text-studio-accent/80 opacity-0 transition group-hover:opacity-100">
-          {hint} →
-        </p>
-      )}
-    </>
-  );
-
-  if (clickable) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className="group rounded-xl border border-studio-border bg-studio-panel p-5 text-left transition hover:border-studio-accent/40 hover:bg-studio-accent/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-studio-accent/50"
-      >
-        {inner}
-      </button>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-studio-border bg-studio-panel p-5">{inner}</div>
   );
 }

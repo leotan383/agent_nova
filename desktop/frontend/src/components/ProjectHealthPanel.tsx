@@ -15,6 +15,8 @@ type Props = {
   onRebuildIndex: () => Promise<void>;
   onReviewChapter: (chapter: number) => void;
   refreshKey?: number;
+  /** 嵌入概览布局时不占满 grid 列宽 */
+  embedded?: boolean;
 };
 
 const severityStyles: Record<string, string> = {
@@ -29,6 +31,7 @@ export default function ProjectHealthPanel({
   onRebuildIndex,
   onReviewChapter,
   refreshKey = 0,
+  embedded = false,
 }: Props) {
   const [health, setHealth] = useState<ProjectHealthDTO | null>(null);
   const [loading, setLoading] = useState(false);
@@ -102,7 +105,11 @@ export default function ProjectHealthPanel({
   const urgentCount = todos.filter((t) => t.severity === "urgent").length;
 
   return (
-    <div className="md:col-span-2 xl:col-span-3 rounded-xl border border-studio-border bg-studio-panel p-5">
+    <div
+      className={`rounded-xl border border-studio-border bg-studio-panel p-5 ${
+        embedded ? "" : "md:col-span-2 xl:col-span-3"
+      }`}
+    >
       <div className="mb-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">待办清单</h3>

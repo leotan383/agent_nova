@@ -165,7 +165,7 @@ export default function VolumePlanPanel({ suggestedVolume, focusVolume, onComple
   return (
     <div
       ref={panelRef}
-      className="md:col-span-2 xl:col-span-3 rounded-xl border border-studio-border bg-studio-panel p-5"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-studio-border bg-studio-panel p-5"
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -245,22 +245,24 @@ export default function VolumePlanPanel({ suggestedVolume, focusVolume, onComple
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-12 text-sm text-studio-muted">
+        <div className="flex min-h-[240px] items-center justify-center text-sm text-studio-muted">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           加载卷纲…
         </div>
       ) : (
-        <MarkdownEditor
-          value={outline?.body ?? ""}
-          editable
-          saving={saving}
-          onSave={saveOutline}
-          emptyHint={
-            outline?.exists
-              ? "卷纲为空"
-              : "尚无卷纲，点击「AI 生成卷纲」或手动编辑后保存"
-          }
-        />
+        <div className="flex min-h-0 max-h-[min(560px,60vh)] flex-1 flex-col overflow-hidden rounded-lg border border-studio-border">
+          <MarkdownEditor
+            value={outline?.body ?? ""}
+            editable
+            saving={saving}
+            onSave={saveOutline}
+            emptyHint={
+              outline?.exists
+                ? "卷纲为空"
+                : "尚无卷纲，点击「AI 生成卷纲」或手动编辑后保存"
+            }
+          />
+        </div>
       )}
     </div>
   );
