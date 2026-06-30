@@ -214,6 +214,10 @@ body {
     @apply bg-studio-panel/80;
   }
 
+  .markdown-prose-paper pre {
+    @apply border-studio-border/60 bg-studio-panel/50 text-studio-ink;
+  }
+
   .markdown-prose pre {
     @apply overflow-x-auto rounded-lg border border-studio-border bg-studio-bg p-4 font-mono text-sm;
   }

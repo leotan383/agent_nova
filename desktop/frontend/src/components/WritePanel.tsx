@@ -1,14 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Square, Wand2 } from "lucide-react";
+import {
+  ChevronDown,
+  Loader2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Square,
+  Wand2,
+} from "lucide-react";
 import { WRITE_EVENTS, eventsOn } from "../lib/runtime";
 import { StatusReport, WriteReportDTO, app } from "../lib/wails";
+import WriteCompletionBar from "./WriteCompletionBar";
 import WriteContextPanel from "./WriteContextPanel";
 import WriteGatePanel from "./WriteGatePanel";
+import WriteStepper from "./WriteStepper";
 
 const stepLabels: Record<string, string> = {
   gate: "写前检查",
   context: "组装上下文",
-  taskbook: "任务书",
+  taskbook: "生成任务书",
   draft: "起草正文",
   review: "审查润色",
   summary: "生成摘要",
@@ -19,9 +28,20 @@ const stepLabels: Record<string, string> = {
 type Props = {
   status: StatusReport | null;
   onComplete: () => void;
+  onGoToPlanning: (volume?: number) => void;
+  onReviewChapter: (chapter: number) => void;
+  onReadChapter: (chapter: number) => void;
+  onRebuildIndex: () => Promise<void>;
 };
 
-export default function WritePanel({ status, onComplete }: Props) {
+export default function WritePanel({
+  status,
+  onComplete,
+  onGoToPlanning,
+  onReviewChapter,
+  onReadChapter,
+  onRebuildIndex,
+}: Props) {
   const [chapter, setChapter] = useState(1);
   const [volume, setVolume] = useState(1);
   const [resume, setResume] = useState(false);
@@ -35,7 +55,9 @@ export default function WritePanel({ status, onComplete }: Props) {
   const [hasKey, setHasKey] = useState(true);
   const [gateOK, setGateOK] = useState(false);
   const [running, setRunning] = useState(false);
-  const scrollRef = useRef<HTMLPreElement>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const jobIdRef = useRef("");
 
   useEffect(() => {
@@ -44,17 +66,6 @@ export default function WritePanel({ status, onComplete }: Props) {
       setVolume(Math.max(1, status.current_volume || 1));
     }
   }, [status]);
-
-  useEffect(() => {
-    if (chapter <= 0) {
-      setGateOK(false);
-      return;
-    }
-    app()
-      .GetWriteGate(chapter, volume)
-      .then((g) => setGateOK(g.ok))
-      .catch(() => setGateOK(false));
-  }, [chapter, volume]);
 
   useEffect(() => {
     app()
@@ -78,7 +89,10 @@ export default function WritePanel({ status, onComplete }: Props) {
       eventsOn(WRITE_EVENTS.status, (p) => {
         if (!match(p.job_id)) return;
         setJobStatus(p.status || "");
-        if (p.status === "running") setRunning(true);
+        if (p.status === "running") {
+          setRunning(true);
+          setSidebarOpen(false);
+        }
         if (p.status === "done" || p.status === "failed" || p.status === "cancelled") {
           setRunning(false);
         }
@@ -98,6 +112,7 @@ export default function WritePanel({ status, onComplete }: Props) {
           }
         }
         setRunning(false);
+        setStep("done");
         onComplete();
       }),
     ];
@@ -105,7 +120,7 @@ export default function WritePanel({ status, onComplete }: Props) {
   }, [onComplete]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [streamText]);
 
   const startWrite = useCallback(async () => {
@@ -116,15 +131,12 @@ export default function WritePanel({ status, onComplete }: Props) {
     setStepMessage("");
     setJobStatus("");
     try {
-      const job = await app().StartWriteChapter({
-        chapter,
-        volume,
-        resume,
-      });
+      const job = await app().StartWriteChapter({ chapter, volume, resume });
       jobIdRef.current = job.id;
       setJobId(job.id);
       setJobStatus(job.status);
       setRunning(true);
+      setSidebarOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -139,136 +151,229 @@ export default function WritePanel({ status, onComplete }: Props) {
     }
   };
 
+  const handleGateFix = (key: string) => {
+    switch (key) {
+      case "volume_outline":
+      case "chapter_outline":
+        onGoToPlanning(volume);
+        break;
+      case "prev_summary":
+        if (chapter > 1) onReadChapter(chapter - 1);
+        break;
+      case "index":
+        void onRebuildIndex();
+        break;
+      default:
+        break;
+    }
+  };
+
+  const wordCount = streamText.replace(/\s/g, "").length;
+  const alertMessage =
+    !hasKey
+      ? "未配置 API Key，请先在右上角「设置」中填写。"
+      : !gateOK && !running
+        ? "写前检查未通过，请展开侧栏处理阻塞项。"
+        : error;
+
   return (
-    <div className="flex h-full min-h-0 flex-col gap-5 overflow-hidden">
-      <WriteGatePanel chapter={chapter} volume={volume} />
-      <WriteContextPanel chapter={chapter} volume={volume} />
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      {/* Hero toolbar */}
+      <header className="shrink-0 border-b border-studio-border bg-studio-panel/80 px-5 py-4 backdrop-blur-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-studio-muted">写作任务</p>
+            <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="text-lg font-semibold text-studio-text">
+                第 {volume} 卷 · 第 {chapter} 章
+              </span>
+              {!running && (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={1}
+                    value={chapter}
+                    onChange={(e) => setChapter(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-14 rounded-md border border-studio-border bg-studio-bg px-2 py-0.5 text-xs outline-none focus:border-studio-accent"
+                    title="章号"
+                  />
+                  <span className="text-xs text-studio-muted">章</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={volume}
+                    onChange={(e) => setVolume(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-14 rounded-md border border-studio-border bg-studio-bg px-2 py-0.5 text-xs outline-none focus:border-studio-accent"
+                    title="卷号"
+                  />
+                  <span className="text-xs text-studio-muted">卷</span>
+                </div>
+              )}
+            </div>
+          </div>
 
-      <div className="flex flex-wrap items-end gap-4 rounded-xl border border-studio-border bg-studio-panel p-5">
-        <div>
-          <label className="mb-1 block text-xs text-studio-muted">章号</label>
-          <input
-            type="number"
-            min={1}
-            value={chapter}
-            onChange={(e) => setChapter(Number(e.target.value))}
-            disabled={running}
-            className="w-24 rounded-lg border border-studio-border bg-studio-bg px-3 py-2 text-sm outline-none focus:border-studio-accent disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs text-studio-muted">卷号</label>
-          <input
-            type="number"
-            min={1}
-            value={volume}
-            onChange={(e) => setVolume(Number(e.target.value))}
-            disabled={running}
-            className="w-24 rounded-lg border border-studio-border bg-studio-bg px-3 py-2 text-sm outline-none focus:border-studio-accent disabled:opacity-50"
-          />
-        </div>
-        <label className="flex items-center gap-2 pb-2 text-sm text-studio-muted">
-          <input
-            type="checkbox"
-            checked={resume}
-            onChange={(e) => setResume(e.target.checked)}
-            disabled={running}
-            className="rounded border-studio-border"
-          />
-          断点续写
-        </label>
-        <div className="ml-auto flex gap-2">
-          {running ? (
-            <button
-              type="button"
-              onClick={cancelWrite}
-              className="inline-flex items-center gap-2 rounded-lg border border-[rgb(var(--studio-danger-border))] px-4 py-2 text-sm text-[rgb(var(--studio-danger-fg))] hover:bg-[rgb(var(--studio-danger-bg))]"
-            >
-              <Square className="h-4 w-4" />
-              取消
-            </button>
+          <div className="hidden h-8 w-px bg-studio-border sm:block" />
+
+          {gateOK ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[rgb(var(--studio-diff-add-bg))] px-2.5 py-1 text-xs text-[rgb(var(--studio-diff-add-stat))]">
+              可开写
+            </span>
           ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[rgb(var(--studio-warning-bg))] px-2.5 py-1 text-xs text-[rgb(var(--studio-warning-fg))]">
+              检查未通过
+            </span>
+          )}
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={startWrite}
-              disabled={!hasKey || !gateOK}
-              className="inline-flex items-center gap-2 rounded-lg bg-studio-accent px-5 py-2 text-sm font-medium text-studio-on-accent hover:brightness-110 disabled:opacity-40"
+              onClick={() => setSidebarOpen((v) => !v)}
+              className="inline-flex items-center gap-1 rounded-lg border border-studio-border px-2.5 py-2 text-xs text-studio-muted hover:bg-studio-bg hover:text-studio-text"
+              title={sidebarOpen ? "收起准备面板" : "展开准备面板"}
             >
-              <Wand2 className="h-4 w-4" />
-              开始写章
+              {sidebarOpen ? (
+                <PanelLeftClose className="h-3.5 w-3.5" />
+              ) : (
+                <PanelLeftOpen className="h-3.5 w-3.5" />
+              )}
+              <span className="hidden sm:inline">{sidebarOpen ? "收起" : "准备"}</span>
             </button>
-          )}
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setOptionsOpen((v) => !v)}
+                disabled={running}
+                className="inline-flex items-center gap-1 rounded-lg border border-studio-border px-2.5 py-2 text-xs text-studio-muted hover:bg-studio-bg disabled:opacity-50"
+              >
+                选项
+                <ChevronDown className="h-3 w-3" />
+              </button>
+              {optionsOpen && (
+                <label className="absolute right-0 top-full z-10 mt-1 flex items-center gap-2 whitespace-nowrap rounded-lg border border-studio-border bg-studio-panel px-3 py-2 text-xs shadow-card">
+                  <input
+                    type="checkbox"
+                    checked={resume}
+                    onChange={(e) => setResume(e.target.checked)}
+                    className="rounded border-studio-border"
+                  />
+                  断点续写
+                </label>
+              )}
+            </div>
+
+            {running ? (
+              <button
+                type="button"
+                onClick={cancelWrite}
+                className="inline-flex items-center gap-2 rounded-xl border border-[rgb(var(--studio-danger-border))] px-4 py-2 text-sm text-[rgb(var(--studio-danger-fg))] hover:bg-[rgb(var(--studio-danger-bg))]"
+              >
+                <Square className="h-4 w-4" />
+                取消
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={startWrite}
+                disabled={!hasKey || !gateOK}
+                className="inline-flex items-center gap-2 rounded-xl bg-studio-accent px-5 py-2 text-sm font-medium text-studio-on-accent hover:brightness-110 disabled:opacity-40"
+              >
+                <Wand2 className="h-4 w-4" />
+                开始写章
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      </header>
 
-      {!hasKey && (
-        <div className="studio-alert-warning">
-          未配置 API Key。请点击右上角「设置」填写，或在终端运行 nova config set api_key ...
-        </div>
-      )}
-
-      {!gateOK && hasKey && !running && (
-        <div className="studio-alert-warning-compact">
-          写前检查未通过，请先处理上方红色项后再开始写章。
-        </div>
-      )}
-
-      {error && (
-        <div className="studio-alert-error">
-          {error}
-        </div>
-      )}
-
-      {(running || step) && (
-        <div className="flex items-center gap-3 text-sm text-studio-muted">
-          {running && <Loader2 className="h-4 w-4 animate-spin text-studio-accent" />}
-          <span>
-            {stepLabels[step] || step || "准备中"}
-            {stepMessage ? ` · ${stepMessage}` : ""}
-          </span>
-          {jobStatus && (
-            <span className="rounded-full bg-studio-border px-2 py-0.5 text-xs">{jobStatus}</span>
-          )}
-        </div>
-      )}
-
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-studio-border bg-studio-paper">
-        <pre
-          ref={scrollRef}
-          className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap p-6 font-serif text-base leading-relaxed text-studio-ink"
-        >
-          {streamText || (running ? "等待流式输出…" : "点击「开始写章」运行完整写章流水线（起草 → 审查 → 摘要 → 记忆）")}
-        </pre>
-      </div>
-
-      {report && (
+      {alertMessage && (
         <div
-          className={`rounded-xl border p-5 ${
-            report.status === "completed"
-              ? "border-[rgb(var(--studio-diff-add-stat)/0.3)] bg-[rgb(var(--studio-diff-add-bg))]"
-              : report.status === "needs_action"
-                ? "border-[rgb(var(--studio-warning-border))] bg-[rgb(var(--studio-warning-bg))]"
-                : "border-studio-border bg-studio-panel"
-          }`}
+          className={`shrink-0 px-5 py-2 text-sm ${
+            error ? "studio-alert-error-compact" : "studio-alert-warning-compact"
+          } mx-5 mt-3 rounded-lg`}
         >
-          <h3 className="font-medium">{report.stage}</h3>
-          <p className="mt-1 text-sm text-studio-muted">{report.summary}</p>
-          {report.issues && report.issues.length > 0 && (
-            <ul className="mt-3 list-inside list-disc text-sm text-[rgb(var(--studio-warning-fg))]">
-              {report.issues.map((i) => (
-                <li key={i}>{i}</li>
-              ))}
-            </ul>
-          )}
-          {report.next_steps && report.next_steps.length > 0 && (
-            <ul className="mt-2 list-inside list-disc text-sm text-studio-muted">
-              {report.next_steps.map((n) => (
-                <li key={n}>{n}</li>
-              ))}
-            </ul>
-          )}
+          {alertMessage}
         </div>
       )}
+
+      <div className="flex min-h-0 flex-1 gap-4 overflow-hidden p-4">
+        {sidebarOpen && (
+          <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto lg:w-80">
+            <WriteGatePanel
+              chapter={chapter}
+              volume={volume}
+              compact
+              onFix={handleGateFix}
+              onReadyChange={setGateOK}
+            />
+            <WriteContextPanel chapter={chapter} volume={volume} defaultCollapsed />
+          </aside>
+        )}
+
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+          <WriteStepper currentStep={step} running={running || !!step} />
+
+          {(running || step) && (
+            <div className="flex shrink-0 items-center gap-2 text-xs text-studio-muted">
+              {running && <Loader2 className="h-3.5 w-3.5 animate-spin text-studio-accent" />}
+              <span>
+                {stepLabels[step] || step || "准备中"}
+                {stepMessage ? ` · ${stepMessage}` : ""}
+              </span>
+              {jobStatus && (
+                <span className="rounded-full bg-studio-border px-2 py-0.5 text-[10px]">{jobStatus}</span>
+              )}
+            </div>
+          )}
+
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-studio-border bg-studio-paper shadow-inner">
+            <div
+              ref={scrollRef}
+              className="min-h-0 flex-1 overflow-y-auto px-6 py-8 sm:px-10"
+            >
+              {streamText ? (
+                <div className="mx-auto max-w-3xl">
+                  <p className="whitespace-pre-wrap font-serif text-base leading-[1.85] text-studio-ink sm:text-[17px]">
+                    {streamText}
+                  </p>
+                  {running && (
+                    <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-studio-accent align-middle" />
+                  )}
+                </div>
+              ) : (
+                <div className="flex h-full min-h-[200px] flex-col items-center justify-center px-6 text-center">
+                  <Wand2 className="mb-3 h-8 w-8 text-studio-muted/30" />
+                  <p className="text-sm font-medium text-studio-muted">创作稿纸</p>
+                  <p className="mt-2 max-w-sm text-xs leading-relaxed text-studio-muted/80">
+                    点击「开始写章」后，AI 将依次完成检查、起草、润色、摘要与记忆沉淀。正文会在此实时显示。
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {running && streamText && (
+              <div className="shrink-0 border-t border-studio-border/60 bg-studio-paper/90 px-4 py-2 text-xs text-studio-muted backdrop-blur-sm">
+                正在{stepLabels[step] || "写作"}… · 已输出约 {wordCount.toLocaleString()} 字
+              </div>
+            )}
+          </div>
+
+          {report && !running && (
+            <WriteCompletionBar
+              chapter={chapter}
+              report={report}
+              onReview={() => onReviewChapter(chapter)}
+              onReadChapter={() => onReadChapter(chapter)}
+              onWriteNext={() => {
+                setReport(null);
+                setStreamText("");
+                setStep("");
+                setChapter((c) => c + 1);
+              }}
+            />
+          )}
+        </main>
+      </div>
     </div>
   );
 }

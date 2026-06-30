@@ -479,7 +479,14 @@ export default function StudioPage() {
 
           {tab === "write" && (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <WritePanel status={status} onComplete={loadStudio} />
+              <WritePanel
+                status={status}
+                onComplete={loadStudio}
+                onGoToPlanning={(vol) => void goToPlanning(vol)}
+                onReviewChapter={(num) => void requestReviewChapter(num)}
+                onReadChapter={(num) => void guardedLoadChapter(num)}
+                onRebuildIndex={handleRebuildIndex}
+              />
             </div>
           )}
 

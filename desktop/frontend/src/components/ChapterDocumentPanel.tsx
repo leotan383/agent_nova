@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ClipboardCheck, Loader2, Square } from "lucide-react";
 import { REVIEW_EVENTS, eventsOn } from "../lib/runtime";
 import { ChapterDocDTO, ReviewReportDTO, app } from "../lib/wails";
+import { stripReviewMetricsSuffix } from "../lib/chapterBody";
 import { confirmUnsavedLeave } from "../lib/unsavedGuard";
 import MarkdownEditor from "./MarkdownEditor";
 
@@ -148,6 +149,8 @@ export default function ChapterDocumentPanel({
   };
 
   const current = docs[tab];
+  const editorValue =
+    tab === "body" ? stripReviewMetricsSuffix(current?.body ?? "") : (current?.body ?? "");
 
   const save = async (body: string) => {
     setSaving(true);
@@ -261,7 +264,7 @@ export default function ChapterDocumentPanel({
 
       <MarkdownEditor
         key={`${chapter}-${tab}`}
-        value={current?.body ?? ""}
+        value={editorValue}
         paper
         saving={saving}
         onSave={save}

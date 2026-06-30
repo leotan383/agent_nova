@@ -290,9 +290,11 @@ export default function MarkdownEditor({
           onMouseUp={readTextareaSelection}
           onKeyUp={readTextareaSelection}
           spellCheck={false}
-          className={`min-h-0 flex-1 resize-none border-0 bg-studio-bg p-4 font-mono text-sm leading-relaxed text-studio-text outline-none ${
-            paper ? "bg-studio-paper text-studio-ink" : ""
-          }`}
+          className={
+            paper
+              ? "min-h-0 flex-1 resize-none border-0 bg-studio-paper p-6 font-serif text-base leading-[1.85] text-studio-ink outline-none"
+              : "min-h-0 flex-1 resize-none border-0 bg-studio-bg p-4 font-mono text-sm leading-relaxed text-studio-text outline-none"
+          }
           placeholder="在此编辑 Markdown…"
         />
       ) : (
