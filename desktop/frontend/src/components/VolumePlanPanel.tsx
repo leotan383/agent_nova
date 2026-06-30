@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles, Square } from "lucide-react";
 import { PLAN_EVENTS, eventsOn } from "../lib/runtime";
 import { PlanReportDTO, VolumeOutlineDTO, app } from "../lib/wails";
+import { confirmUnsavedLeave } from "../lib/unsavedGuard";
 import MarkdownEditor from "./MarkdownEditor";
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
 
 export default function VolumePlanPanel({ suggestedVolume, focusVolume, onComplete }: Props) {
   const [volume, setVolume] = useState(Math.max(1, suggestedVolume));
+  const [volumeInput, setVolumeInput] = useState(String(Math.max(1, suggestedVolume)));
   const [outline, setOutline] = useState<VolumeOutlineDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -26,15 +28,23 @@ export default function VolumePlanPanel({ suggestedVolume, focusVolume, onComple
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setVolume(Math.max(1, suggestedVolume));
+    const v = Math.max(1, suggestedVolume);
+    setVolume(v);
+    setVolumeInput(String(v));
   }, [suggestedVolume]);
 
   useEffect(() => {
-    if (focusVolume && focusVolume > 0) {
-      setVolume(focusVolume);
+    if (!focusVolume || focusVolume <= 0) return;
+    void (async () => {
+      if (focusVolume !== volume) {
+        const ok = await confirmUnsavedLeave();
+        if (!ok) return;
+        setVolume(focusVolume);
+        setVolumeInput(String(focusVolume));
+      }
       panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [focusVolume]);
+    })();
+  }, [focusVolume, volume]);
 
   useEffect(() => {
     app()
@@ -125,7 +135,12 @@ export default function VolumePlanPanel({ suggestedVolume, focusVolume, onComple
     setError("");
     try {
       await app().SaveVolumeOutline(volume, body);
-      await loadOutline();
+      setOutline((prev) => ({
+        volume,
+        path: prev?.path ?? "",
+        body,
+        exists: true,
+      }));
       onComplete();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -133,6 +148,18 @@ export default function VolumePlanPanel({ suggestedVolume, focusVolume, onComple
     } finally {
       setSaving(false);
     }
+  };
+
+  const commitVolume = async () => {
+    const next = Math.max(1, parseInt(volumeInput, 10) || 1);
+    setVolumeInput(String(next));
+    if (next === volume) return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) {
+      setVolumeInput(String(volume));
+      return;
+    }
+    setVolume(next);
   };
 
   return (
@@ -153,9 +180,16 @@ export default function VolumePlanPanel({ suggestedVolume, focusVolume, onComple
             <input
               type="number"
               min={1}
-              value={volume}
+              value={volumeInput}
               disabled={running}
-              onChange={(e) => setVolume(Math.max(1, parseInt(e.target.value, 10) || 1))}
+              onChange={(e) => setVolumeInput(e.target.value)}
+              onBlur={() => void commitVolume()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void commitVolume();
+                }
+              }}
               className="w-16 rounded-lg border border-studio-border bg-studio-bg px-2 py-1 text-center"
             />
           </label>

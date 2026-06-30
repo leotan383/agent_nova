@@ -10,6 +10,7 @@ import {
   Users,
 } from "lucide-react";
 import { WikiContentDTO, WikiEntryDTO, app } from "../lib/wails";
+import { confirmUnsavedLeave } from "../lib/unsavedGuard";
 import MarkdownEditor from "./MarkdownEditor";
 
 const GROUP_ORDER = ["人物", "设定", "大纲"] as const;
@@ -132,10 +133,17 @@ export default function WikiPanel({ initialSelectedID = "" }: Props) {
     setSaving(true);
     try {
       await app().SaveWikiContent(selectedID, body);
-      await loadContent(selectedID);
+      setContent((prev) => (prev ? { ...prev, body } : prev));
     } finally {
       setSaving(false);
     }
+  };
+
+  const selectEntry = async (id: string) => {
+    if (id === selectedID) return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
+    setSelectedID(id);
   };
 
   return (
@@ -198,7 +206,7 @@ export default function WikiPanel({ initialSelectedID = "" }: Props) {
                         <li key={e.id}>
                           <button
                             type="button"
-                            onClick={() => setSelectedID(e.id)}
+                            onClick={() => selectEntry(e.id)}
                             className={`w-full border-b border-studio-border/50 px-3 py-2.5 pl-8 text-left text-sm transition hover:bg-studio-bg ${
                               selectedID === e.id ? "bg-studio-bg text-studio-accent" : ""
                             }`}

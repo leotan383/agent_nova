@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Eye, Loader2, Pencil, Save } from "lucide-react";
+import { Circle, Eye, Loader2, Pencil, Save } from "lucide-react";
 import ContentPreview from "./ContentPreview";
 import SelectionQuickActions, { TextSelection } from "./SelectionQuickActions";
+import { registerUnsavedEditor } from "../lib/unsavedGuard";
 
 type ViewMode = "preview" | "edit";
+type SaveStatus = "idle" | "unsaved" | "saving" | "saved" | "error";
 
 type Props = {
   value: string;
@@ -14,7 +16,14 @@ type Props = {
   emptyHint?: string;
   /** 传入章号时，正文选区可触发 AI 快捷改写 */
   selectionChapter?: number;
+  /** 编辑后自动保存，默认开启 */
+  autoSave?: boolean;
+  /** 自动保存 debounce 毫秒，默认 2000 */
+  autoSaveMs?: number;
 };
+
+const DEFAULT_AUTO_SAVE_MS = 2000;
+const SAVED_HINT_MS = 2000;
 
 export default function MarkdownEditor({
   value,
@@ -24,35 +33,111 @@ export default function MarkdownEditor({
   onSave,
   emptyHint = "暂无内容",
   selectionChapter,
+  autoSave = true,
+  autoSaveMs = DEFAULT_AUTO_SAVE_MS,
 }: Props) {
   const [mode, setMode] = useState<ViewMode>("preview");
   const [draft, setDraft] = useState(value);
   const [error, setError] = useState("");
   const [selection, setSelection] = useState<TextSelection | null>(null);
+  const [internalSaving, setInternalSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const draftRef = useRef(draft);
+  const valueRef = useRef(value);
+  const prevValueRef = useRef(value);
+  const savingRef = useRef(false);
+  const savedTimerRef = useRef<number | null>(null);
+
+  draftRef.current = draft;
+  valueRef.current = value;
 
   const selectionEnabled = !!selectionChapter && editable && !!onSave;
 
   useEffect(() => {
+    if (value === prevValueRef.current) return;
+    prevValueRef.current = value;
     setDraft(value);
     setMode("preview");
     setError("");
     setSelection(null);
+    setSaveStatus("idle");
   }, [value]);
 
   const dirty = draft !== value;
   const canEdit = editable && !!onSave;
+  const isSaving = saving || internalSaving;
+
+  useEffect(() => {
+    if (!canEdit) return;
+    if (dirty) {
+      setSaveStatus((s) => (s === "saving" || s === "error" ? s : "unsaved"));
+    } else if (saveStatus === "unsaved") {
+      setSaveStatus("idle");
+    }
+  }, [canEdit, dirty, saveStatus]);
+
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) window.clearTimeout(savedTimerRef.current);
+    };
+  }, []);
+
+  const performSave = useCallback(
+    async (content: string) => {
+      if (!onSave || content === valueRef.current || savingRef.current) return true;
+      savingRef.current = true;
+      setInternalSaving(true);
+      setSaveStatus("saving");
+      setError("");
+      try {
+        await onSave(content);
+        setSaveStatus("saved");
+        if (savedTimerRef.current) window.clearTimeout(savedTimerRef.current);
+        savedTimerRef.current = window.setTimeout(() => {
+          setSaveStatus("idle");
+        }, SAVED_HINT_MS);
+        return true;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        setSaveStatus("error");
+        return false;
+      } finally {
+        savingRef.current = false;
+        setInternalSaving(false);
+      }
+    },
+    [onSave],
+  );
 
   const handleSave = async () => {
     if (!onSave || !dirty) return;
-    setError("");
-    try {
-      await onSave(draft);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
+    await performSave(draft);
   };
+
+  useEffect(() => {
+    if (!canEdit || !autoSave || !dirty || isSaving) return;
+    const timer = window.setTimeout(() => {
+      void performSave(draftRef.current);
+    }, autoSaveMs);
+    return () => window.clearTimeout(timer);
+  }, [autoSave, autoSaveMs, canEdit, dirty, draft, isSaving, performSave]);
+
+  useEffect(() => {
+    if (!onSave) return;
+    const handle = {
+      isDirty: () => draftRef.current !== valueRef.current,
+      save: () => performSave(draftRef.current),
+      discard: () => {
+        setDraft(valueRef.current);
+        setError("");
+        setSelection(null);
+        setSaveStatus("idle");
+      },
+    };
+    return registerUnsavedEditor(handle);
+  }, [onSave, performSave]);
 
   const readTextareaSelection = useCallback(() => {
     const el = textareaRef.current;
@@ -106,6 +191,22 @@ export default function MarkdownEditor({
     window.getSelection()?.removeAllRanges();
   };
 
+  const statusLabel: Record<SaveStatus, string> = {
+    idle: "",
+    unsaved: "未保存",
+    saving: "保存中…",
+    saved: "已保存",
+    error: "保存失败",
+  };
+
+  const statusClass: Record<SaveStatus, string> = {
+    idle: "text-studio-muted",
+    unsaved: "text-[rgb(var(--studio-warning-fg))]",
+    saving: "text-studio-muted",
+    saved: "text-[rgb(var(--studio-diff-add-stat))]",
+    error: "text-red-500",
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-studio-border px-3 py-2">
@@ -144,17 +245,29 @@ export default function MarkdownEditor({
           )}
         </div>
 
-        {canEdit && (
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!dirty || saving}
-            className="inline-flex items-center gap-1 rounded-lg bg-studio-accent px-3 py-1.5 text-xs font-medium text-studio-on-accent hover:brightness-110 disabled:opacity-40"
-          >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            保存
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {canEdit && saveStatus !== "idle" && (
+            <span className={`inline-flex items-center gap-1 text-xs ${statusClass[saveStatus]}`}>
+              {saveStatus === "saving" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Circle className={`h-2 w-2 fill-current ${saveStatus === "unsaved" ? "animate-pulse" : ""}`} />
+              )}
+              {statusLabel[saveStatus]}
+            </span>
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!dirty || isSaving}
+              className="inline-flex items-center gap-1 rounded-lg bg-studio-accent px-3 py-1.5 text-xs font-medium text-studio-on-accent hover:brightness-110 disabled:opacity-40"
+            >
+              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              保存
+            </button>
+          )}
+        </div>
       </div>
 
       {selectionEnabled && selection && (

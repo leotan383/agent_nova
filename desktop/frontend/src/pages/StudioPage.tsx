@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useBlocker, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   BookMarked,
@@ -30,6 +30,8 @@ import SettingsDialog from "../components/SettingsDialog";
 import SearchDialog, { SearchSession } from "../components/SearchDialog";
 import ThemeToggle from "../components/ThemeToggle";
 import WikiPanel from "../components/WikiPanel";
+import UnsavedChangesDialog from "../components/UnsavedChangesDialog";
+import { confirmUnsavedLeave, hasUnsavedChanges } from "../lib/unsavedGuard";
 
 type Tab = "overview" | "write" | "chapters" | "memory" | "wiki" | "entities";
 type ChapterDocTab = "body" | "review" | "summary";
@@ -94,6 +96,12 @@ export default function StudioPage() {
   const activeNovel = novels.find((n) => n.id === activeId);
 
   const switchNovel = async (id: string) => {
+    if (id === activeId) {
+      setSwitcherOpen(false);
+      return;
+    }
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
     try {
       await app().SwitchNovel(id);
       setSwitcherOpen(false);
@@ -111,40 +119,59 @@ export default function StudioPage() {
     setTab("chapters");
   };
 
+  const guardedLoadChapter = async (num: number, docKind: ChapterDocTab = "body") => {
+    if (tab === "chapters" && selectedChapter === num && chapterDocTab === docKind) return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
+    loadChapter(num, docKind);
+  };
+
   const refreshChapterView = () => {
     setChapterRefreshKey((k) => k + 1);
     loadStudio();
   };
 
-  const goToChapters = () => {
+  const goToChapters = async () => {
+    if (tab === "chapters") return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
     setTab("chapters");
   };
 
-  const goToCurrentChapter = () => {
+  const goToCurrentChapter = async () => {
     const num = status?.current_chapter ?? 0;
     if (num <= 0) {
       const latest = chapters[chapters.length - 1]?.number;
       if (latest) {
-        loadChapter(latest);
+        await guardedLoadChapter(latest);
       } else {
-        setTab("chapters");
+        await goToChapters();
       }
       return;
     }
-    loadChapter(num);
+    await guardedLoadChapter(num);
   };
 
-  const goToMemories = () => {
+  const goToMemories = async () => {
+    if (tab === "memory" && memoryFocus === "memories") return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
     setMemoryFocus("memories");
     setTab("memory");
   };
 
-  const goToForeshadows = () => {
+  const goToForeshadows = async () => {
+    if (tab === "memory" && memoryFocus === "foreshadows") return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
     setMemoryFocus("foreshadows");
     setTab("memory");
   };
 
-  const goToWrite = () => {
+  const goToWrite = async () => {
+    if (tab === "write") return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
     clearSearchReturn();
     setTab("write");
   };
@@ -165,23 +192,23 @@ export default function StudioPage() {
     loadStudio();
   };
 
-  const openWikiEntry = (wikiID: string) => {
-    setWikiSelectedID(wikiID);
-    setTab("wiki");
-  };
-
   const clearSearchReturn = () => {
     setNavBeforeSearch(null);
     setSearchHighlightId("");
   };
 
-  const switchTab = (id: Tab) => {
+  const switchTab = async (id: Tab) => {
+    if (tab === id) return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
     clearSearchReturn();
     setTab(id);
   };
 
-  const restoreNavBeforeSearch = () => {
+  const restoreNavBeforeSearch = async () => {
     if (!navBeforeSearch) return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
     setTab(navBeforeSearch.tab);
     setSelectedChapter(navBeforeSearch.selectedChapter);
     setChapterDocTab(navBeforeSearch.chapterDocTab);
@@ -190,7 +217,10 @@ export default function StudioPage() {
     clearSearchReturn();
   };
 
-  const navigateFromSearch = (hit: SearchHitDTO) => {
+  const navigateFromSearch = async (hit: SearchHitDTO) => {
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
+
     setNavBeforeSearch({
       tab,
       selectedChapter,
@@ -206,7 +236,10 @@ export default function StudioPage() {
         break;
       case "setting":
       case "entity":
-        if (hit.wiki_id) openWikiEntry(hit.wiki_id);
+        if (hit.wiki_id) {
+          setWikiSelectedID(hit.wiki_id);
+          setTab("wiki");
+        }
         break;
       case "memory":
         setMemoryFocus("memories");
@@ -220,6 +253,34 @@ export default function StudioPage() {
         if (hit.chapter > 0) loadChapter(hit.chapter, "body");
     }
   };
+
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      currentLocation.pathname !== nextLocation.pathname && hasUnsavedChanges(),
+  );
+
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    let cancelled = false;
+    void confirmUnsavedLeave().then((ok) => {
+      if (cancelled) return;
+      if (ok) blocker.proceed?.();
+      else blocker.reset?.();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [blocker]);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges()) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
 
   const navItems = [
     { id: "overview" as Tab, label: "概览", icon: LayoutDashboard },
@@ -422,7 +483,7 @@ export default function StudioPage() {
                 onPlanVolume={focusPlanVolume}
                 onOpenWrite={goToWrite}
                 onRebuildIndex={handleRebuildIndex}
-                onOpenChapterReview={(num) => loadChapter(num, "review")}
+                onOpenChapterReview={(num) => void guardedLoadChapter(num, "review")}
               />
               <VolumePlanPanel
                 suggestedVolume={status.current_volume || 1}
@@ -451,7 +512,7 @@ export default function StudioPage() {
                       <li key={c.number}>
                         <button
                           type="button"
-                          onClick={() => loadChapter(c.number)}
+                          onClick={() => void guardedLoadChapter(c.number)}
                           className={`w-full border-b border-studio-border px-4 py-3 text-left text-sm transition hover:bg-studio-bg ${
                             selectedChapter === c.number ? "bg-studio-bg text-studio-accent" : ""
                           }`}
@@ -547,6 +608,7 @@ export default function StudioPage() {
         onSessionChange={setSearchSession}
         onNavigate={navigateFromSearch}
       />
+      <UnsavedChangesDialog />
     </div>
   );
 }

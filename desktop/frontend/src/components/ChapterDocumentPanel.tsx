@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { ChapterDocDTO, app } from "../lib/wails";
+import { confirmUnsavedLeave } from "../lib/unsavedGuard";
 import MarkdownEditor from "./MarkdownEditor";
 
 type DocKind = "body" | "review" | "summary";
@@ -56,11 +57,23 @@ export default function ChapterDocumentPanel({ chapter, initialTab = "body", onS
     setSaving(true);
     try {
       await app().SaveChapterDocument(chapter, tab, body);
-      await loadAll();
+      setDocs((prev) => ({
+        ...prev,
+        [tab]: prev[tab]
+          ? { ...prev[tab]!, body, exists: true }
+          : { kind: tab, chapter, title: "", body, exists: true },
+      }));
       onSaved?.();
     } finally {
       setSaving(false);
     }
+  };
+
+  const switchDocTab = async (kind: DocKind) => {
+    if (kind === tab) return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
+    setTab(kind);
   };
 
   if (loading) {
@@ -80,7 +93,7 @@ export default function ChapterDocumentPanel({ chapter, initialTab = "body", onS
             <button
               key={kind}
               type="button"
-              onClick={() => setTab(kind)}
+              onClick={() => switchDocTab(kind)}
               className={`rounded-lg px-3 py-1.5 text-xs transition ${
                 tab === kind
                   ? "bg-studio-accent/15 text-studio-accent"
@@ -105,7 +118,7 @@ export default function ChapterDocumentPanel({ chapter, initialTab = "body", onS
       )}
 
       <MarkdownEditor
-        key={`${chapter}-${tab}-${current?.body?.length ?? 0}`}
+        key={`${chapter}-${tab}`}
         value={current?.body ?? ""}
         paper
         saving={saving}
