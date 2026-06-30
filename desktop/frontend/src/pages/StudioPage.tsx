@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useBlocker, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   BookMarked,
@@ -207,6 +207,13 @@ export default function StudioPage() {
     refreshChapterView();
   };
 
+  const goToLibrary = async () => {
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
+    setSwitcherOpen(false);
+    navigate("/");
+  };
+
   const clearSearchReturn = () => {
     setNavBeforeSearch(null);
     setSearchHighlightId("");
@@ -269,24 +276,6 @@ export default function StudioPage() {
     }
   };
 
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      currentLocation.pathname !== nextLocation.pathname && hasUnsavedChanges(),
-  );
-
-  useEffect(() => {
-    if (blocker.state !== "blocked") return;
-    let cancelled = false;
-    void confirmUnsavedLeave().then((ok) => {
-      if (cancelled) return;
-      if (ok) blocker.proceed?.();
-      else blocker.reset?.();
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [blocker]);
-
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!hasUnsavedChanges()) return;
@@ -309,13 +298,14 @@ export default function StudioPage() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <header className="flex shrink-0 items-center gap-4 border-b border-studio-border px-5 py-3">
-        <Link
-          to="/"
+        <button
+          type="button"
+          onClick={() => void goToLibrary()}
           className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-studio-muted hover:bg-studio-panel hover:text-studio-text"
         >
           <ArrowLeft className="h-4 w-4" />
           书库
-        </Link>
+        </button>
 
         <div className="relative">
           <button
@@ -343,13 +333,13 @@ export default function StudioPage() {
                 </button>
               ))}
               <div className="my-2 border-t border-studio-border" />
-              <Link
-                to="/"
-                className="block px-4 py-2 text-sm text-studio-muted hover:text-studio-text"
-                onClick={() => setSwitcherOpen(false)}
+              <button
+                type="button"
+                onClick={() => void goToLibrary()}
+                className="block w-full px-4 py-2 text-left text-sm text-studio-muted hover:text-studio-text"
               >
                 返回书库…
-              </Link>
+              </button>
             </div>
           )}
         </div>
