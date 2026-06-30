@@ -1,0 +1,11 @@
+node_modules/
+desktop/frontend/node_modules/
+desktop/frontend/dist/
+frontend/dist/
+frontend/src/wailsjs/
+desktop/frontend/src/wailsjs/
+.DS_Store
+*.log
+bin/
+.env
+.idea/

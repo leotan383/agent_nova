@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>nova dashboard</title>
+  <style>
+    :root { --bg: #0f1117; --card: #1a1d27; --text: #e6e8ef; --muted: #8b90a0; --accent: #6c8cff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    header { padding: 1rem 1.5rem; border-bottom: 1px solid #2a2f3a; display: flex; justify-content: space-between; align-items: center; }
+    h1 { margin: 0; font-size: 1.25rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; padding: 1rem 1.5rem; }
+    .card { background: var(--card); border-radius: 10px; padding: 1rem; border: 1px solid #2a2f3a; }
+    .card h2 { margin: 0 0 .75rem; font-size: .95rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: .35rem 0; border-bottom: 1px solid #252936; font-size: .9rem; }
+    li:last-child { border-bottom: none; }
+    .stat { font-size: 2rem; font-weight: 700; color: var(--accent); }
+    .muted { color: var(--muted); font-size: .85rem; }
+    #chapter-content { white-space: pre-wrap; max-height: 400px; overflow: auto; font-size: .9rem; line-height: 1.6; }
+    select, button { background: #252936; color: var(--text); border: 1px solid #3a4050; border-radius: 6px; padding: .4rem .6rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="title">nova dashboard</h1>
+    <span class="muted" id="phase"></span>
+  </header>
+  <div class="grid">
+    <div class="card">
+      <h2>进度</h2>
+      <div class="stat" id="chapter-count">-</div>
+      <div class="muted">已写章节 · 记忆 <span id="memory-count">-</span> · open伏笔 <span id="foreshadow-count">-</span></div>
+    </div>
+    <div class="card">
+      <h2>章节</h2>
+      <ul id="chapters"></ul>
+    </div>
+    <div class="card">
+      <h2>实体</h2>
+      <ul id="entities"></ul>
+    </div>
+    <div class="card">
+      <h2>伏笔</h2>
+      <ul id="foreshadows"></ul>
+    </div>
+    <div class="card" style="grid-column: 1 / -1;">
+      <h2>章节阅读</h2>
+      <select id="chapter-select"></select>
+      <button onclick="loadChapter()">加载</button>
+      <pre id="chapter-content"></pre>
+    </div>
+  </div>
+  <script>
+    async function j(url) { const r = await fetch(url); return r.json(); }
+    async function refresh() {
+      const st = await j('/api/status');
+      document.getElementById('title').textContent = st.title || 'nova';
+      document.getElementById('phase').textContent = 'phase: ' + st.phase;
+      document.getElementById('chapter-count').textContent = st.chapter_count;
+      document.getElementById('memory-count').textContent = st.memory_count;
+      document.getElementById('foreshadow-count').textContent = st.open_foreshadows;
+      const chs = await j('/api/chapters');
+      const ul = document.getElementById('chapters');
+      const sel = document.getElementById('chapter-select');
+      ul.innerHTML = ''; sel.innerHTML = '';
+      chs.forEach(c => {
+        ul.innerHTML += `<li>第${c.number}章 ${c.title || ''} (${c.word_count}字)</li>`;
+        sel.innerHTML += `<option value="${c.number}">第${c.number}章</option>`;
+      });
+      const ents = await j('/api/entities?q=');
+      document.getElementById('entities').innerHTML = ents.map(e => `<li>[${e.type}] ${e.name}</li>`).join('') || '<li class="muted">暂无</li>';
+      const fs = await j('/api/foreshadows?status=open');
+      document.getElementById('foreshadows').innerHTML = fs.map(f => `<li>第${f.planted_chapter}章: ${f.description}</li>`).join('') || '<li class="muted">暂无</li>';
+    }
+    async function loadChapter() {
+      const n = document.getElementById('chapter-select').value;
+      const data = await j('/api/chapter/' + n);
+      document.getElementById('chapter-content').textContent = data.content || '';
+    }
+    refresh();
+    setInterval(refresh, 15000);
+  </script>
+</body>
+</html>
