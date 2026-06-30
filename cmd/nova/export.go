@@ -31,14 +31,21 @@ var exportCmd = &cobra.Command{
 			if out == "" {
 				out = filepath.Join(actx.Project.Root, actx.Project.Meta.Title+".epub")
 			}
-			if err := export.WriteEPUB(actx.Project, out); err != nil {
+			if err := export.WriteEPUB(actx.Project, out, export.Options{}); err != nil {
+				return err
+			}
+		case "txt":
+			if out == "" {
+				out = filepath.Join(actx.Project.Root, actx.Project.Meta.Title+".txt")
+			}
+			if err := export.WriteTXT(actx.Project, out, export.Options{}); err != nil {
 				return err
 			}
 		default:
 			if out == "" {
 				out = filepath.Join(actx.Project.Root, "export.md")
 			}
-			if err := export.WriteMarkdown(actx.Project, out); err != nil {
+			if err := export.WriteMarkdown(actx.Project, out, export.Options{}); err != nil {
 				return err
 			}
 		}
@@ -49,5 +56,5 @@ var exportCmd = &cobra.Command{
 
 func init() {
 	exportCmd.Flags().StringVar(&exportOut, "out", "", "输出路径")
-	exportCmd.Flags().StringVar(&exportFormat, "format", "markdown", "格式: markdown|epub")
+	exportCmd.Flags().StringVar(&exportFormat, "format", "markdown", "格式: markdown|epub|txt")
 }

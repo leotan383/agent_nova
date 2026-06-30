@@ -210,6 +210,20 @@ export interface CreateNovelFromDiscoverInput {
   enrich: boolean;
 }
 
+export interface ExportInput {
+  format: string;
+  out_path: string;
+  from_chapter: number;
+  to_chapter: number;
+}
+
+export interface ExportResultDTO {
+  path: string;
+  format: string;
+  chapter_count: number;
+  word_count: number;
+}
+
 export interface VersionEntryDTO {
   id: string;
   created_at: string;
@@ -328,6 +342,9 @@ interface AppBindings {
   CreateNovelFromDiscover(input: CreateNovelFromDiscoverInput): Promise<NovelCard>;
   GetDiscoverTurns(): Promise<CoachTurnDTO[] | null>;
   ClearDiscover(): Promise<void>;
+  DefaultExportFilename(format: string): Promise<string>;
+  PickExportPath(format: string, defaultName: string): Promise<string>;
+  ExportProject(input: ExportInput): Promise<ExportResultDTO>;
   UpdateMemory(input: UpdateMemoryInput): Promise<void>;
   ArchiveMemory(id: string): Promise<void>;
   CreateMemory(input: CreateMemoryInput): Promise<MemoryDTO>;

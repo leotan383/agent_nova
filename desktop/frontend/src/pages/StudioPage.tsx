@@ -6,6 +6,7 @@ import {
   BookOpen,
   Brain,
   ChevronDown,
+  Download,
   FileText,
   History,
   LayoutDashboard,
@@ -22,6 +23,7 @@ import ChapterCoachPanel from "../components/ChapterCoachPanel";
 import ChapterVersionPanel from "../components/ChapterVersionPanel";
 import ProgressPanel from "../components/ProgressPanel";
 import EntityPanel from "../components/EntityPanel";
+import ExportDialog from "../components/ExportDialog";
 import SettingsDialog from "../components/SettingsDialog";
 import SearchDialog, { SearchSession } from "../components/SearchDialog";
 import ThemeToggle from "../components/ThemeToggle";
@@ -56,6 +58,7 @@ export default function StudioPage() {
   const [navBeforeSearch, setNavBeforeSearch] = useState<NavSnapshot | null>(null);
   const [searchHighlightId, setSearchHighlightId] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [wikiSelectedID, setWikiSelectedID] = useState("");
   const [chapterRefreshKey, setChapterRefreshKey] = useState(0);
 
@@ -262,6 +265,15 @@ export default function StudioPage() {
           >
             <Search className="h-4 w-4" />
             <span className="hidden sm:inline">搜索</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-studio-border px-3 py-2 text-sm text-studio-muted hover:border-studio-muted hover:text-studio-text"
+            title="导出小说"
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">导出</span>
           </button>
           <button
             type="button"
@@ -499,6 +511,7 @@ export default function StudioPage() {
       </div>
 
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} status={status} />
 
       <SearchDialog
         open={searchOpen}

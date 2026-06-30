@@ -7,31 +7,95 @@ import (
 	"html"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tanlian/agent_nova/internal/project"
 )
 
-// WriteEPUB exports chapters under 正文/ to a minimal EPUB3 file.
-func WriteEPUB(p *project.Project, outPath string) error {
+// Options 导出范围与格式选项。
+type Options struct {
+	FromChapter int // 0 = 不限
+	ToChapter   int // 0 = 不限
+}
+
+// ChapterFile 待导出章节。
+type ChapterFile struct {
+	Number int
+	Path   string
+	Name   string
+	Body   string
+}
+
+var chapterNumRe = regexp.MustCompile(`^第(\d+)章`)
+
+// ListChapters 按章号排序列出正文文件。
+func ListChapters(p *project.Project, opts Options) ([]ChapterFile, error) {
 	entries, err := os.ReadDir(p.ChaptersDir())
+	if err != nil {
+		return nil, err
+	}
+	byNum := map[int]ChapterFile{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		m := chapterNumRe.FindStringSubmatch(e.Name())
+		if len(m) < 2 {
+			continue
+		}
+		var num int
+		fmt.Sscanf(m[1], "%d", &num)
+		if num <= 0 {
+			continue
+		}
+		if opts.FromChapter > 0 && num < opts.FromChapter {
+			continue
+		}
+		if opts.ToChapter > 0 && num > opts.ToChapter {
+			continue
+		}
+		path := filepath.Join(p.ChaptersDir(), e.Name())
+		prev, ok := byNum[num]
+		if ok {
+			info, err1 := e.Info()
+			prevInfo, err2 := os.Stat(prev.Path)
+			if err1 == nil && err2 == nil && !info.ModTime().After(prevInfo.ModTime()) {
+				continue
+			}
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		byNum[num] = ChapterFile{Number: num, Path: path, Name: e.Name(), Body: string(data)}
+	}
+	if len(byNum) == 0 {
+		return nil, fmt.Errorf("无章节可导出")
+	}
+	nums := make([]int, 0, len(byNum))
+	for n := range byNum {
+		nums = append(nums, n)
+	}
+	sort.Ints(nums)
+	out := make([]ChapterFile, len(nums))
+	for i, n := range nums {
+		out[i] = byNum[n]
+	}
+	return out, nil
+}
+
+// WriteEPUB exports chapters under 正文/ to a minimal EPUB3 file.
+func WriteEPUB(p *project.Project, outPath string, opts Options) error {
+	chs, err := ListChapters(p, opts)
 	if err != nil {
 		return err
 	}
-	var files []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
-			files = append(files, e.Name())
-		}
-	}
-	sort.Strings(files)
-	if len(files) == 0 {
-		return fmt.Errorf("无章节可导出")
-	}
 	if outPath == "" {
-		outPath = filepath.Join(p.Root, p.Meta.Title+".epub")
+		outPath = filepath.Join(p.Root, sanitizeFilename(p.Meta.Title)+".epub")
 	}
 	f, err := os.Create(outPath)
 	if err != nil {
@@ -47,18 +111,15 @@ func WriteEPUB(p *project.Project, outPath string) error {
 	var spine strings.Builder
 	var nav strings.Builder
 	nav.WriteString(`<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>目录</title></head><body><nav><ol>`)
-	for i, name := range files {
+	for i, ch := range chs {
 		id := fmt.Sprintf("ch%03d", i+1)
-		data, err := os.ReadFile(filepath.Join(p.ChaptersDir(), name))
-		if err != nil {
-			return err
-		}
-		body := markdownToXHTML(string(data))
-		xhtml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head><title>%s</title></head><body>%s</body></html>`, html.EscapeString(strings.TrimSuffix(name, ".md")), body)
+		label := chapterLabel(ch)
+		body := markdownToXHTML(ch.Body)
+		xhtml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head><title>%s</title></head><body>%s</body></html>`, html.EscapeString(label), body)
 		writeZipFile(zw, "OEBPS/"+id+".xhtml", xhtml, true)
 		manifest.WriteString(fmt.Sprintf(`<item id="%s" href="%s.xhtml" media-type="application/xhtml+xml"/>`, id, id))
 		spine.WriteString(fmt.Sprintf(`<itemref idref="%s"/>`, id))
-		nav.WriteString(fmt.Sprintf(`<li><a href="%s.xhtml">%s</a></li>`, id, html.EscapeString(strings.TrimSuffix(name, ".md"))))
+		nav.WriteString(fmt.Sprintf(`<li><a href="%s.xhtml">%s</a></li>`, id, html.EscapeString(label)))
 	}
 	nav.WriteString(`</ol></nav></body></html>`)
 	writeZipFile(zw, "OEBPS/nav.xhtml", nav.String(), true)
@@ -100,23 +161,88 @@ func markdownToXHTML(md string) string {
 }
 
 // WriteMarkdown merges chapters to a single markdown file.
-func WriteMarkdown(p *project.Project, outPath string) error {
-	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf("# %s\n\n", p.Meta.Title))
-	entries, err := os.ReadDir(p.ChaptersDir())
+func WriteMarkdown(p *project.Project, outPath string, opts Options) error {
+	chs, err := ListChapters(p, opts)
 	if err != nil {
 		return err
 	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			continue
+	var buf bytes.Buffer
+	buf.WriteString(fmt.Sprintf("# %s\n\n", p.Meta.Title))
+	for i, ch := range chs {
+		if i > 0 {
+			buf.WriteString("\n\n---\n\n")
 		}
-		data, err := os.ReadFile(filepath.Join(p.ChaptersDir(), e.Name()))
-		if err != nil {
-			return err
-		}
-		buf.WriteString("\n\n---\n\n")
-		buf.Write(data)
+		buf.WriteString(ch.Body)
+	}
+	if outPath == "" {
+		outPath = filepath.Join(p.Root, "export.md")
 	}
 	return os.WriteFile(outPath, buf.Bytes(), 0o644)
+}
+
+// WriteTXT 导出为纯文本（去除 Markdown 标题符号，保留段落）。
+func WriteTXT(p *project.Project, outPath string, opts Options) error {
+	chs, err := ListChapters(p, opts)
+	if err != nil {
+		return err
+	}
+	var buf bytes.Buffer
+	buf.WriteString(p.Meta.Title + "\n")
+	buf.WriteString(strings.Repeat("=", utf8.RuneCountInString(p.Meta.Title)) + "\n\n")
+	for i, ch := range chs {
+		if i > 0 {
+			buf.WriteString("\n\n" + strings.Repeat("-", 40) + "\n\n")
+		}
+		buf.WriteString(chapterLabel(ch) + "\n\n")
+		buf.WriteString(markdownToPlain(ch.Body))
+	}
+	if outPath == "" {
+		outPath = filepath.Join(p.Root, sanitizeFilename(p.Meta.Title)+".txt")
+	}
+	return os.WriteFile(outPath, buf.Bytes(), 0o644)
+}
+
+func markdownToPlain(md string) string {
+	var lines []string
+	for _, line := range strings.Split(md, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			lines = append(lines, "")
+			continue
+		}
+		for strings.HasPrefix(line, "#") {
+			line = strings.TrimSpace(strings.TrimLeft(line, "#"))
+		}
+		lines = append(lines, line)
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+func chapterLabel(ch ChapterFile) string {
+	title := strings.TrimSuffix(ch.Name, ".md")
+	if title != "" {
+		return title
+	}
+	return fmt.Sprintf("第%d章", ch.Number)
+}
+
+func sanitizeFilename(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "novel"
+	}
+	replacer := strings.NewReplacer("/", "-", "\\", "-", ":", "-", "*", "-", "?", "-", "\"", "-", "<", "-", ">", "-", "|", "-")
+	return replacer.Replace(s)
+}
+
+// CountWords 统计 UTF-8 字数（不计空白）。
+func CountWords(text string) int {
+	n := 0
+	for _, r := range text {
+		if r == ' ' || r == '\n' || r == '\r' || r == '\t' {
+			continue
+		}
+		n++
+	}
+	return n
 }
