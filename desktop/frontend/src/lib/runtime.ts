@@ -1,6 +1,7 @@
 export type WriteEventPayload = {
   job_id?: string;
-  chapter: number;
+  chapter?: number;
+  volume?: number;
   delta?: string;
   step?: string;
   message?: string;
@@ -64,4 +65,10 @@ export const DISCOVER_EVENTS = {
   stream: "discover:stream",
   done: "discover:done",
   error: "discover:error",
+} as const;
+
+export const PLAN_EVENTS = {
+  status: "plan:status",
+  done: "plan:done",
+  error: "plan:error",
 } as const;

@@ -108,6 +108,49 @@ export interface WriteReportDTO {
   next_steps?: string[];
 }
 
+export interface TodoItemDTO {
+  id: string;
+  label: string;
+  detail: string;
+  severity: string;
+  action: string;
+  action_param?: string;
+}
+
+export interface ProjectHealthDTO {
+  ok: boolean;
+  suggested_volume: number;
+  next_chapter: number;
+  has_volume_outline: boolean;
+  volume_outline_path?: string;
+  todos: TodoItemDTO[];
+}
+
+export interface StartPlanInput {
+  volume: number;
+}
+
+export interface PlanJobInfo {
+  id: string;
+  volume: number;
+  status: string;
+}
+
+export interface PlanReportDTO {
+  stage: string;
+  status: string;
+  summary: string;
+  artifacts?: string[];
+  next_steps?: string[];
+}
+
+export interface VolumeOutlineDTO {
+  volume: number;
+  path: string;
+  body: string;
+  exists: boolean;
+}
+
 export interface MemoryDTO {
   id: string;
   category: string;
@@ -325,6 +368,7 @@ interface AppBindings {
   PickCreateDirectory(): Promise<string>;
   RevealInFolder(path: string): Promise<void>;
   GetStatus(): Promise<StatusReport>;
+  GetProjectHealth(): Promise<ProjectHealthDTO>;
   ListChapters(): Promise<ChapterDTO[]>;
   GetChapterContent(number: number): Promise<string>;
   SaveChapterContent(number: number, content: string): Promise<void>;
@@ -356,6 +400,12 @@ interface AppBindings {
   CancelWriteChapter(jobID: string): Promise<void>;
   GetWriteJob(jobID: string): Promise<WriteJobInfo>;
   IsWriteRunning(): Promise<boolean>;
+  GetVolumeOutline(volume: number): Promise<VolumeOutlineDTO>;
+  SaveVolumeOutline(volume: number, body: string): Promise<void>;
+  StartPlanVolume(input: StartPlanInput): Promise<PlanJobInfo>;
+  CancelPlanVolume(jobID: string): Promise<void>;
+  IsPlanRunning(): Promise<boolean>;
+  RebuildProjectIndex(): Promise<void>;
   ListMemories(): Promise<MemoryDTO[]>;
   ListForeshadows(status: string): Promise<ForeshadowDTO[]>;
   SendChapterCoachMessage(chapter: number, message: string): Promise<void>;

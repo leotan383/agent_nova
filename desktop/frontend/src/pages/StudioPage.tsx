@@ -22,6 +22,8 @@ import WritePanel from "../components/WritePanel";
 import ChapterCoachPanel from "../components/ChapterCoachPanel";
 import ChapterVersionPanel from "../components/ChapterVersionPanel";
 import ProgressPanel from "../components/ProgressPanel";
+import ProjectHealthPanel from "../components/ProjectHealthPanel";
+import VolumePlanPanel from "../components/VolumePlanPanel";
 import EntityPanel from "../components/EntityPanel";
 import ExportDialog from "../components/ExportDialog";
 import SettingsDialog from "../components/SettingsDialog";
@@ -61,6 +63,8 @@ export default function StudioPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [wikiSelectedID, setWikiSelectedID] = useState("");
   const [chapterRefreshKey, setChapterRefreshKey] = useState(0);
+  const [healthRefreshKey, setHealthRefreshKey] = useState(0);
+  const [planFocusVolume, setPlanFocusVolume] = useState<number | null>(null);
 
   const loadStudio = useCallback(async () => {
     setError("");
@@ -138,6 +142,27 @@ export default function StudioPage() {
   const goToForeshadows = () => {
     setMemoryFocus("foreshadows");
     setTab("memory");
+  };
+
+  const goToWrite = () => {
+    clearSearchReturn();
+    setTab("write");
+  };
+
+  const focusPlanVolume = (volume: number) => {
+    setPlanFocusVolume(volume);
+    setHealthRefreshKey((k) => k + 1);
+  };
+
+  const handleRebuildIndex = async () => {
+    await app().RebuildProjectIndex();
+    await loadStudio();
+    setHealthRefreshKey((k) => k + 1);
+  };
+
+  const handlePlanComplete = () => {
+    setHealthRefreshKey((k) => k + 1);
+    loadStudio();
   };
 
   const openWikiEntry = (wikiID: string) => {
@@ -392,16 +417,18 @@ export default function StudioPage() {
                   </ul>
                 </div>
               )}
-              {status.urgent && status.urgent.length > 0 && (
-                <div className="md:col-span-2 xl:col-span-3 rounded-xl border border-[rgb(var(--studio-warning-border))] bg-[rgb(var(--studio-warning-bg))] p-5">
-                  <h3 className="text-sm font-medium text-[rgb(var(--studio-warning-title))]">待处理</h3>
-                  <ul className="mt-3 space-y-2 text-sm text-[rgb(var(--studio-warning-fg))]">
-                    {status.urgent.map((s) => (
-                      <li key={s}>{s}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <ProjectHealthPanel
+                refreshKey={healthRefreshKey}
+                onPlanVolume={focusPlanVolume}
+                onOpenWrite={goToWrite}
+                onRebuildIndex={handleRebuildIndex}
+                onOpenChapterReview={(num) => loadChapter(num, "review")}
+              />
+              <VolumePlanPanel
+                suggestedVolume={status.current_volume || 1}
+                focusVolume={planFocusVolume}
+                onComplete={handlePlanComplete}
+              />
             </div>
             </div>
           )}

@@ -27,6 +27,7 @@ var errNoActiveProject = fmt.Errorf("请先在书库中选择或创建一本小�
 type App struct {
 	ctx       context.Context
 	write     writeManager
+	plan      planManager
 	coach     coachManager
 	revise    reviseManager
 	selection selectionManager
@@ -37,6 +38,7 @@ type App struct {
 func NewApp() *App {
 	a := &App{}
 	a.write = *newWriteManager(a)
+	a.plan = *newPlanManager(a)
 	a.coach = *newCoachManager(a)
 	a.revise = *newReviseManager(a)
 	a.selection = *newSelectionManager(a)
