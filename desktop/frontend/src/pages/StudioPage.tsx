@@ -11,6 +11,8 @@ import {
   LayoutDashboard,
   PenLine,
   Search,
+  Settings,
+  Users,
 } from "lucide-react";
 import { ChapterDTO, NovelCard, SearchHitDTO, StatusReport, app, phaseLabel } from "../lib/wails";
 import ChapterDocumentPanel from "../components/ChapterDocumentPanel";
@@ -19,11 +21,13 @@ import WritePanel from "../components/WritePanel";
 import ChapterCoachPanel from "../components/ChapterCoachPanel";
 import ChapterVersionPanel from "../components/ChapterVersionPanel";
 import ProgressPanel from "../components/ProgressPanel";
+import EntityPanel from "../components/EntityPanel";
+import SettingsDialog from "../components/SettingsDialog";
 import SearchDialog, { SearchSession } from "../components/SearchDialog";
 import ThemeToggle from "../components/ThemeToggle";
 import WikiPanel from "../components/WikiPanel";
 
-type Tab = "overview" | "write" | "chapters" | "memory" | "wiki";
+type Tab = "overview" | "write" | "chapters" | "memory" | "wiki" | "entities";
 type ChapterDocTab = "body" | "review" | "summary";
 
 type NavSnapshot = {
@@ -51,6 +55,7 @@ export default function StudioPage() {
   const [searchSession, setSearchSession] = useState<SearchSession | null>(null);
   const [navBeforeSearch, setNavBeforeSearch] = useState<NavSnapshot | null>(null);
   const [searchHighlightId, setSearchHighlightId] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [wikiSelectedID, setWikiSelectedID] = useState("");
   const [chapterRefreshKey, setChapterRefreshKey] = useState(0);
 
@@ -193,6 +198,7 @@ export default function StudioPage() {
     { id: "write" as Tab, label: "写作", icon: PenLine },
     { id: "chapters" as Tab, label: "章节", icon: FileText },
     { id: "memory" as Tab, label: "记忆", icon: Brain },
+    { id: "entities" as Tab, label: "状态", icon: Users },
     { id: "wiki" as Tab, label: "百科", icon: BookOpen },
   ];
 
@@ -257,6 +263,14 @@ export default function StudioPage() {
             <Search className="h-4 w-4" />
             <span className="hidden sm:inline">搜索</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-studio-border px-3 py-2 text-sm text-studio-muted hover:border-studio-muted hover:text-studio-text"
+            title="应用设置"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
           <ThemeToggle />
           {status && status.target_words > 0 && (
             <span className="hidden tabular-nums sm:inline">
@@ -295,7 +309,7 @@ export default function StudioPage() {
             ))}
           </nav>
           <p className="mt-8 px-3 text-xs leading-relaxed text-studio-muted">
-            百科查阅人物卡与设定集；章节页可与 AI 改稿顾问讨论已写章节。
+            状态页查看人物/地点/物品的当前状态；百科查阅设定与大纲；章节页可与改稿顾问讨论。
           </p>
         </aside>
 
@@ -475,8 +489,16 @@ export default function StudioPage() {
               <WikiPanel initialSelectedID={wikiSelectedID} />
             </div>
           )}
+
+          {tab === "entities" && (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <EntityPanel />
+            </div>
+          )}
         </main>
       </div>
+
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       <SearchDialog
         open={searchOpen}

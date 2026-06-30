@@ -150,6 +150,66 @@ export interface SelectionJobInfo {
   status: string;
 }
 
+export interface GateCheckDTO {
+  key: string;
+  label: string;
+  ok: boolean;
+  detail: string;
+  blocking: boolean;
+}
+
+export interface WriteGateDTO {
+  ok: boolean;
+  chapter: number;
+  volume: number;
+  checks: GateCheckDTO[];
+}
+
+export interface EntityDTO {
+  id: string;
+  type: string;
+  name: string;
+  state: Record<string, string>;
+  last_chapter: number;
+}
+
+export interface AppConfigDTO {
+  model: string;
+  base_url: string;
+  has_api_key: boolean;
+  api_key_mask: string;
+}
+
+export interface SaveAppConfigInput {
+  model: string;
+  base_url: string;
+  api_key?: string;
+}
+
+export interface DiscoverPreviewDTO {
+  title: string;
+  genre: string;
+  style: string;
+  protagonist: string;
+  cheat: string;
+  pitch: string;
+  synopsis: string;
+  transcript: string;
+}
+
+export interface CreateNovelFromDiscoverInput {
+  dir: string;
+  title: string;
+  genre: string;
+  style: string;
+  target_words: number;
+  chapter_words: number;
+  protagonist: string;
+  cheat: string;
+  synopsis: string;
+  enrich: boolean;
+}
+
 export interface VersionEntryDTO {
   id: string;
   created_at: string;
@@ -258,6 +318,16 @@ interface AppBindings {
   SaveChapterDocument(chapter: number, kind: string, body: string): Promise<void>;
   SearchProject(query: string, limit: number): Promise<SearchHitDTO[]>;
   GetWriteContext(chapter: number, volume: number): Promise<WriteContextDTO>;
+  GetWriteGate(chapter: number, volume: number): Promise<WriteGateDTO>;
+  ListEntities(entityType: string): Promise<EntityDTO[]>;
+  GetAppConfig(): Promise<AppConfigDTO>;
+  SaveAppConfig(input: SaveAppConfigInput): Promise<void>;
+  StartDiscover(seedGenre: string): Promise<CoachTurnDTO[]>;
+  SendDiscoverMessage(message: string): Promise<void>;
+  FinishDiscover(): Promise<DiscoverPreviewDTO>;
+  CreateNovelFromDiscover(input: CreateNovelFromDiscoverInput): Promise<NovelCard>;
+  GetDiscoverTurns(): Promise<CoachTurnDTO[] | null>;
+  ClearDiscover(): Promise<void>;
   UpdateMemory(input: UpdateMemoryInput): Promise<void>;
   ArchiveMemory(id: string): Promise<void>;
   CreateMemory(input: CreateMemoryInput): Promise<MemoryDTO>;

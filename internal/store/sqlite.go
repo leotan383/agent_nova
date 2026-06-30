@@ -317,6 +317,33 @@ func (s *Store) SearchEntities(query string, limit int) ([]Entity, error) {
 	return out, rows.Err()
 }
 
+// ListEntities 列出实体状态，可按 type 过滤（character/location/item）。
+func (s *Store) ListEntities(entityType string, limit int) ([]Entity, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	var rows *sql.Rows
+	var err error
+	if entityType != "" {
+		rows, err = s.db.Query(`SELECT id, type, name, state_json, last_chapter FROM entities WHERE type=? ORDER BY last_chapter DESC, name LIMIT ?`, entityType, limit)
+	} else {
+		rows, err = s.db.Query(`SELECT id, type, name, state_json, last_chapter FROM entities ORDER BY type, last_chapter DESC, name LIMIT ?`, limit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Entity
+	for rows.Next() {
+		var e Entity
+		if err := rows.Scan(&e.ID, &e.Type, &e.Name, &e.StateJSON, &e.LastChapter); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) UpsertForeshadow(f Foreshadow) error {
 	_, err := s.db.Exec(`
 INSERT INTO foreshadows (id, description, planted_chapter, resolved_chapter, status) VALUES (?, ?, ?, ?, ?)

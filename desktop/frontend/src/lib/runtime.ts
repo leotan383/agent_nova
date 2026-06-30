@@ -59,3 +59,9 @@ export const SELECTION_EVENTS = {
   done: "selection:done",
   error: "selection:error",
 } as const;
+
+export const DISCOVER_EVENTS = {
+  stream: "discover:stream",
+  done: "discover:done",
+  error: "discover:error",
+} as const;

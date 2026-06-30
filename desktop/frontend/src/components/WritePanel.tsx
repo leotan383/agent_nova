@@ -3,6 +3,7 @@ import { Loader2, Square, Wand2 } from "lucide-react";
 import { WRITE_EVENTS, eventsOn } from "../lib/runtime";
 import { StatusReport, WriteReportDTO, app } from "../lib/wails";
 import WriteContextPanel from "./WriteContextPanel";
+import WriteGatePanel from "./WriteGatePanel";
 
 const stepLabels: Record<string, string> = {
   gate: "写前检查",
@@ -32,6 +33,7 @@ export default function WritePanel({ status, onComplete }: Props) {
   const [report, setReport] = useState<WriteReportDTO | null>(null);
   const [error, setError] = useState("");
   const [hasKey, setHasKey] = useState(true);
+  const [gateOK, setGateOK] = useState(false);
   const [running, setRunning] = useState(false);
   const scrollRef = useRef<HTMLPreElement>(null);
   const jobIdRef = useRef("");
@@ -42,6 +44,17 @@ export default function WritePanel({ status, onComplete }: Props) {
       setVolume(Math.max(1, status.current_volume || 1));
     }
   }, [status]);
+
+  useEffect(() => {
+    if (chapter <= 0) {
+      setGateOK(false);
+      return;
+    }
+    app()
+      .GetWriteGate(chapter, volume)
+      .then((g) => setGateOK(g.ok))
+      .catch(() => setGateOK(false));
+  }, [chapter, volume]);
 
   useEffect(() => {
     app()
@@ -128,6 +141,7 @@ export default function WritePanel({ status, onComplete }: Props) {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-5 overflow-hidden">
+      <WriteGatePanel chapter={chapter} volume={volume} />
       <WriteContextPanel chapter={chapter} volume={volume} />
 
       <div className="flex flex-wrap items-end gap-4 rounded-xl border border-studio-border bg-studio-panel p-5">
@@ -177,7 +191,7 @@ export default function WritePanel({ status, onComplete }: Props) {
             <button
               type="button"
               onClick={startWrite}
-              disabled={!hasKey}
+              disabled={!hasKey || !gateOK}
               className="inline-flex items-center gap-2 rounded-lg bg-studio-accent px-5 py-2 text-sm font-medium text-studio-on-accent hover:brightness-110 disabled:opacity-40"
             >
               <Wand2 className="h-4 w-4" />
@@ -189,7 +203,13 @@ export default function WritePanel({ status, onComplete }: Props) {
 
       {!hasKey && (
         <div className="studio-alert-warning">
-          未配置 API Key。请在终端运行 <code className="text-studio-accent">nova config set api_key ...</code>
+          未配置 API Key。请点击右上角「设置」填写，或在终端运行 nova config set api_key ...
+        </div>
+      )}
+
+      {!gateOK && hasKey && !running && (
+        <div className="studio-alert-warning-compact">
+          写前检查未通过，请先处理上方红色项后再开始写章。
         </div>
       )}
 

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FolderOpen, Plus, RefreshCw } from "lucide-react";
+import { FolderOpen, Plus, RefreshCw, Settings } from "lucide-react";
 import ThemeToggle from "../components/ThemeToggle";
+import DiscoverCreatePanel from "../components/DiscoverCreatePanel";
+import SettingsDialog from "../components/SettingsDialog";
 import NovelCardView from "../components/NovelCard";
 import {
   NovelCard,
@@ -29,6 +31,8 @@ export default function LibraryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [createMode, setCreateMode] = useState<"form" | "discover">("discover");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(defaultCreateForm);
 
@@ -72,7 +76,9 @@ export default function LibraryPage() {
 
   const closeCreate = () => {
     setShowCreate(false);
+    setCreateMode("discover");
     setForm(defaultCreateForm());
+    app().ClearDiscover().catch(() => {});
   };
 
   const handleCreate = async () => {
@@ -117,6 +123,14 @@ export default function LibraryPage() {
         </div>
         <div className="flex items-center gap-3">
           <ThemeToggle />
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-studio-border px-3 py-2 text-sm text-studio-muted hover:text-studio-text"
+          >
+            <Settings className="h-4 w-4" />
+            设置
+          </button>
           <button
             type="button"
             onClick={refresh}
@@ -220,6 +234,40 @@ export default function LibraryPage() {
         <div className="studio-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-studio-border bg-studio-panel p-6 shadow-card">
             <h2 className="text-lg font-medium">新建小说</h2>
+            <div className="mt-4 flex gap-1 rounded-lg border border-studio-border bg-studio-bg p-1">
+              <button
+                type="button"
+                onClick={() => setCreateMode("discover")}
+                className={`flex-1 rounded-md px-3 py-1.5 text-xs ${
+                  createMode === "discover" ? "bg-studio-panel text-studio-accent shadow-sm" : "text-studio-muted"
+                }`}
+              >
+                AI 探讨立项
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateMode("form")}
+                className={`flex-1 rounded-md px-3 py-1.5 text-xs ${
+                  createMode === "form" ? "bg-studio-panel text-studio-accent shadow-sm" : "text-studio-muted"
+                }`}
+              >
+                表单快速创建
+              </button>
+            </div>
+
+            {createMode === "discover" ? (
+              <div className="mt-5">
+                <DiscoverCreatePanel
+                  onCreated={async () => {
+                    closeCreate();
+                    await refresh();
+                    navigate("/studio");
+                  }}
+                  onCancel={closeCreate}
+                />
+              </div>
+            ) : (
+              <>
             <p className="mt-1 text-sm text-studio-muted">填写基本信息，创建项目骨架</p>
 
             {error && (
@@ -358,9 +406,13 @@ export default function LibraryPage() {
                 {creating ? "创建中…" : "创建"}
               </button>
             </div>
+              </>
+            )}
           </div>
         </div>
       )}
+
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

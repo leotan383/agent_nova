@@ -30,6 +30,7 @@ type App struct {
 	coach     coachManager
 	revise    reviseManager
 	selection selectionManager
+	discover  discoverManager
 	session   projectSession
 }
 
@@ -39,6 +40,7 @@ func NewApp() *App {
 	a.coach = *newCoachManager(a)
 	a.revise = *newReviseManager(a)
 	a.selection = *newSelectionManager(a)
+	a.discover = *newDiscoverManager(a)
 	return a
 }
 
