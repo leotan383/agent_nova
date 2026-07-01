@@ -17,12 +17,21 @@ const (
 )
 
 type Report struct {
-	Stage       string   `json:"stage"`
-	Status      Status   `json:"status"`
-	Summary     string   `json:"summary"`
-	Artifacts   []string `json:"artifacts,omitempty"`
-	Issues      []string `json:"issues,omitempty"`
-	NextSteps   []string `json:"next_steps,omitempty"`
+	Stage       string      `json:"stage"`
+	Status      Status      `json:"status"`
+	Summary     string      `json:"summary"`
+	Artifacts   []string    `json:"artifacts,omitempty"`
+	Issues      []string    `json:"issues,omitempty"`
+	NextSteps   []string    `json:"next_steps,omitempty"`
+	TokenUsage  *TokenUsage `json:"token_usage,omitempty"`
+}
+
+// TokenUsage 写章流水线 LLM token 用量（粗估或 API 回报）。
+type TokenUsage struct {
+	PromptTokens     int     `json:"prompt_tokens"`
+	CompletionTokens int     `json:"completion_tokens"`
+	TotalTokens      int     `json:"total_tokens"`
+	EstimatedCostUSD float64 `json:"estimated_cost_usd,omitempty"`
 }
 
 func (r *Report) PrintText() {

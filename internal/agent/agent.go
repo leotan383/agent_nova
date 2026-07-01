@@ -43,12 +43,21 @@ func New(opts Options) *Agent {
 	}
 }
 
+// Model 返回当前使用的 LLM 模型名。
+func (a *Agent) Model() string {
+	if a == nil {
+		return ""
+	}
+	return a.model
+}
+
 type RunInput struct {
 	SystemPrompt string
 	UserPrompt   string
 	Tools        bool
 	Stream       bool
 	OnDelta      func(string) error
+	UsageAcc     *UsageAccumulator
 }
 
 func (a *Agent) Run(ctx context.Context, in RunInput) (string, error) {
@@ -61,7 +70,7 @@ func (a *Agent) Run(ctx context.Context, in RunInput) (string, error) {
 		toolDefs = nil
 	}
 	if in.Stream && len(toolDefs) == 0 {
-		return a.runStream(ctx, messages, in.OnDelta)
+		return a.runStream(ctx, messages, in.OnDelta, in.UsageAcc)
 	}
 	for i := 0; i < maxToolLoops; i++ {
 		logger.Debug("agent round=%d messages=%d tools=%d", i+1, len(messages), len(toolDefs))
@@ -78,6 +87,19 @@ func (a *Agent) Run(ctx context.Context, in RunInput) (string, error) {
 		}
 		msg := resp.Choices[0].Message
 		if len(msg.ToolCalls) == 0 {
+			if in.UsageAcc != nil {
+				if resp.Usage.TotalTokens > 0 {
+					in.UsageAcc.Add(UsageStats{
+						PromptTokens:     resp.Usage.PromptTokens,
+						CompletionTokens: resp.Usage.CompletionTokens,
+					})
+				} else {
+					in.UsageAcc.Add(UsageStats{
+						PromptTokens:     messagesPromptTokens(messages),
+						CompletionTokens: EstimateTokens(msg.Content),
+					})
+				}
+			}
 			return msg.Content, nil
 		}
 		messages = append(messages, msg)
@@ -96,7 +118,7 @@ func (a *Agent) Run(ctx context.Context, in RunInput) (string, error) {
 	return "", errors.New("tool loop exceeded maximum iterations")
 }
 
-func (a *Agent) runStream(ctx context.Context, messages []openai.ChatCompletionMessage, onDelta func(string) error) (string, error) {
+func (a *Agent) runStream(ctx context.Context, messages []openai.ChatCompletionMessage, onDelta func(string) error, usageAcc *UsageAccumulator) (string, error) {
 	stream, err := a.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
 		Model:    a.model,
 		Messages: messages,
@@ -129,7 +151,14 @@ func (a *Agent) runStream(ctx context.Context, messages []openai.ChatCompletionM
 			}
 		}
 	}
-	return b.String(), nil
+	out := b.String()
+	if usageAcc != nil {
+		usageAcc.Add(UsageStats{
+			PromptTokens:     messagesPromptTokens(messages),
+			CompletionTokens: EstimateTokens(out),
+		})
+	}
+	return out, nil
 }
 
 func ExtractJSONBlock(content string) (string, error) {

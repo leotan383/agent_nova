@@ -483,11 +483,13 @@ export default function StudioPage() {
           {tab === "overview" && status && (
             <div className="min-h-0 flex-1 overflow-y-auto">
               <OverviewPanel
+                novelId={activeId}
                 status={status}
                 healthRefreshKey={healthRefreshKey}
                 onContinueWrite={() => void openWriteMode()}
                 onOpenPlanning={(vol) => void goToPlanning(vol)}
                 onOpenWrite={() => void openWriteMode()}
+                onOpenSettings={() => setSettingsOpen(true)}
                 onRebuildIndex={handleRebuildIndex}
                 onReviewChapter={(num) => void requestReviewChapter(num)}
                 onGoToChapters={() => void goToChapters()}
@@ -522,7 +524,10 @@ export default function StudioPage() {
                 onVersionPanelOpenChange={setVersionPanelOpen}
                 onSelectChapter={(num) => void guardedLoadChapter(num)}
                 onStartWrite={() => void openWriteMode()}
-                onWriteComplete={loadStudio}
+                onWriteComplete={() => {
+                  loadStudio();
+                  setHealthRefreshKey((k) => k + 1);
+                }}
                 onGoToPlanning={(vol) => void goToPlanning(vol)}
                 onReviewChapter={(num) => void requestReviewChapter(num)}
                 onReadChapter={(num) => void guardedLoadChapter(num)}

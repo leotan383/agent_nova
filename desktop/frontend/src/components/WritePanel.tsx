@@ -8,11 +8,19 @@ import {
   Wand2,
 } from "lucide-react";
 import { WRITE_EVENTS, eventsOn } from "../lib/runtime";
-import { StatusReport, WriteReportDTO, app } from "../lib/wails";
+import { StatusReport, WriteReportDTO, WriteJobStateDTO, app } from "../lib/wails";
 import WriteCompletionBar from "./WriteCompletionBar";
 import WriteContextPanel from "./WriteContextPanel";
 import WriteGatePanel from "./WriteGatePanel";
 import WriteStepper from "./WriteStepper";
+
+const jobStatusLabels: Record<string, string> = {
+  pending: "排队中",
+  running: "进行中",
+  done: "已完成",
+  failed: "失败",
+  cancelled: "已取消",
+};
 
 const stepLabels: Record<string, string> = {
   gate: "写前检查",
@@ -75,20 +83,50 @@ export default function WritePanel({
   useEffect(() => {
     void (async () => {
       try {
-        const { active, job } = await app().GetActiveWriteJob();
+        const { active, job, state } = await app().GetActiveWriteJob();
         if (!active || !job.id) return;
-        jobIdRef.current = job.id;
-        setJobId(job.id);
-        setWritingChapter(job.chapter);
-        setJobStatus(job.status);
-        const isRunning = job.status === "pending" || job.status === "running";
-        setRunning(isRunning);
-        if (isRunning) setSidebarOpen(false);
+        applyJobState(job.id, job.chapter, job.status, state);
       } catch {
         /* ignore */
       }
     })();
   }, []);
+
+  const applyJobState = (
+    id: string,
+    chapterNum: number,
+    status: string,
+    state?: WriteJobStateDTO,
+  ) => {
+    jobIdRef.current = id;
+    setJobId(id);
+    setWritingChapter(chapterNum);
+    setJobStatus(status);
+    const isRunning = status === "pending" || status === "running";
+    setRunning(isRunning);
+    if (state?.stream_text) setStreamText(state.stream_text);
+    if (state?.step) setStep(state.step);
+    if (state?.step_message) setStepMessage(state.step_message);
+    if (isRunning) setSidebarOpen(false);
+  };
+
+  // 切 Tab 回来后从后端拉全量流式缓冲
+  useEffect(() => {
+    if (!running || !jobId) return;
+    const sync = () => {
+      app()
+        .GetWriteJobState(jobId)
+        .then((state) => {
+          if (state.stream_text) setStreamText(state.stream_text);
+          if (state.step) setStep(state.step);
+          if (state.step_message) setStepMessage(state.step_message);
+        })
+        .catch(() => {});
+    };
+    sync();
+    const timer = window.setInterval(sync, 3000);
+    return () => window.clearInterval(timer);
+  }, [running, jobId]);
 
   useEffect(() => {
     const match = (id?: string) => !jobIdRef.current || id === jobIdRef.current;
@@ -217,7 +255,16 @@ export default function WritePanel({
 
           <div className="hidden h-8 w-px bg-studio-border sm:block" />
 
-          {gateOK ? (
+          {running ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-studio-accent/15 px-2.5 py-1 text-xs font-medium text-studio-accent">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {stepLabels[step] || "写作中"}
+            </span>
+          ) : report ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[rgb(var(--studio-diff-add-bg))] px-2.5 py-1 text-xs text-[rgb(var(--studio-diff-add-stat))]">
+              已完成
+            </span>
+          ) : gateOK ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-[rgb(var(--studio-diff-add-bg))] px-2.5 py-1 text-xs text-[rgb(var(--studio-diff-add-stat))]">
               可开写
             </span>
@@ -324,13 +371,15 @@ export default function WritePanel({
                   {stepLabels[step] || step || "准备中"}
                   {stepMessage ? ` · ${stepMessage}` : ""}
                 </span>
-                {jobStatus && (
-                  <span className="rounded-full bg-studio-border px-2 py-0.5 text-[10px]">{jobStatus}</span>
+                {jobStatus && !running && (
+                  <span className="rounded-full bg-studio-border px-2 py-0.5 text-[10px]">
+                    {jobStatusLabels[jobStatus] || jobStatus}
+                  </span>
                 )}
               </div>
-              {running && !streamText && (
+              {running && !streamText && step !== "draft" && (
                 <p className="text-[11px] text-studio-muted/80">
-                  任务进行中。若刚切换回此页，已输出的正文无法回放，后续流式内容会继续追加。
+                  任务进行中，请稍候…
                 </p>
               )}
             </div>

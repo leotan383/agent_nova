@@ -1,6 +1,6 @@
 # Nova Studio 桌面端
 
-跨平台桌面应用（Wails v2 + React），提供小说书库管理与创作工作室壳层。
+跨平台桌面应用（Wails v2 + React），提供小说书库管理与完整创作工作室。
 
 ## 环境要求
 
@@ -37,29 +37,36 @@ wails build
 
 产物位于 `desktop/build/bin/`。
 
-仅构建前端：
-
-```bash
-cd desktop/frontend
-npm run build
-```
-
 ## 架构
 
 ```
 desktop/
 ├── main.go          # Wails 入口
-├── app.go           # Go ↔ 前端 bindings
-├── wails.json
+├── app.go           # Go ↔ 前端 bindings（书库、状态、索引）
+├── write.go         # 写章任务 + 流式缓冲 + token 统计
+├── plan.go          # 卷纲规划
+├── review.go        # 章节审查
+├── coach.go         # 改稿讨论
+├── discover.go      # AI 探讨立项
 └── frontend/        # React + Tailwind UI
     └── src/
-        ├── pages/LibraryPage.tsx   # 书库
-        └── pages/StudioPage.tsx    # 工作室壳
-
-internal/library/    # 书库 registry (~/.config/nova/library.json)
+        ├── pages/LibraryPage.tsx    # 书库
+        └── pages/StudioPage.tsx     # 工作室（五 Tab）
 ```
 
-## Go Bindings（前端 window.go.main.App）
+## 工作室功能（StudioPage）
+
+| Tab | 功能 |
+|-----|------|
+| **概览** | 进度、新手引导、健康待办、API 用量累计 |
+| **规划** | 卷纲查看/编辑、AI 生成卷纲 |
+| **章节** | AI 写章（流式）、阅读/编辑正文/审查/摘要、Coach 改稿、版本历史、选区快捷改写 |
+| **记忆** | 长期记忆 CRUD、伏笔管理、冲突检测 |
+| **设定** | Wiki 统一浏览设定集/大纲/实体 |
+
+## Go Bindings（前端 `window.go.main.App`）
+
+### 书库
 
 | 方法 | 说明 |
 |------|------|
@@ -69,24 +76,70 @@ internal/library/    # 书库 registry (~/.config/nova/library.json)
 | `CreateNovel` / `PickCreateDirectory` | 新建小说 |
 | `RemoveFromLibrary` / `SetNovelPinned` / `SetNovelArchived` | 书库管理 |
 | `RevealInFolder` | 系统文件管理器 |
-| `GetStatus` / `ListChapters` / `GetChapterContent` | 工作室数据 |
-| `StartWriteChapter` / `CancelWriteChapter` | 流式写章（见下方事件） |
-| `GetWriteJob` / `IsWriteRunning` | 任务状态 |
+
+### 创作数据
+
+| 方法 | 说明 |
+|------|------|
+| `GetStatus` / `GetProjectHealth` | 创作状态 / 健康待办 |
+| `ListChapters` / `GetChapterContent` | 章节列表与正文 |
+| `GetChapterDocument` / `SaveChapterDocument` | 正文/审查/摘要读写 |
+| `GetWriteContext` / `GetWriteGate` | 写章上下文与门禁 |
+| `GetProjectTokenUsage` | 项目累计 LLM token 用量 |
+
+### AI 工作流
+
+| 方法 | 说明 |
+|------|------|
+| `StartDiscover` / `SendDiscoverMessage` / `FinishDiscover` / `CreateNovelFromDiscover` | AI 探讨立项 |
+| `StartPlanVolume` / `CancelPlanVolume` | AI 生成卷纲 |
+| `StartWriteChapter` / `CancelWriteChapter` | 流式写章 |
+| `GetWriteJob` / `GetWriteJobState` / `GetActiveWriteJob` | 写章任务状态与流式缓冲恢复 |
+| `StartReviewChapter` / `CancelReviewChapter` | 章节审查 |
+| `SendChapterCoachMessage` / `StartChapterRevision` | 改稿讨论与修订 |
+| `StartSelectionTransform` | 选区快捷改写 |
+
+### 记忆与导出
+
+| 方法 | 说明 |
+|------|------|
+| `ListMemories` / `CreateMemory` / `UpdateMemory` / `ArchiveMemory` | 记忆管理 |
+| `ListForeshadows` / `ResolveForeshadow` / `UpdateForeshadow` | 伏笔管理 |
+| `FindMemoryConflicts` | 记忆冲突检测 |
+| `ExportProject` | 导出 Markdown / TXT / EPUB |
+| `ListWikiEntries` / `GetWikiContent` / `SaveWikiContent` | Wiki 设定浏览 |
 
 ### 写章流式事件
 
 前端通过 `window.runtime.EventsOn` 订阅：
 
-| 事件 |  payload 字段 | 说明 |
+| 事件 | payload 字段 | 说明 |
 |------|----------------|------|
 | `write:delta` | `job_id`, `chapter`, `delta` | 起草正文流式片段 |
 | `write:step` | `job_id`, `chapter`, `step`, `message` | 流水线步骤 |
 | `write:status` | `job_id`, `chapter`, `status`, `message` | pending / running / done / failed / cancelled |
-| `write:done` | `job_id`, `chapter`, `report` (JSON) | 完成报告 |
+| `write:done` | `job_id`, `chapter`, `report` (JSON) | 完成报告（含 token_usage） |
 | `write:error` | `job_id`, `chapter`, `error` | 错误 |
 
-## 后续迭代
+切换 Tab 后可通过 `GetWriteJobState` / `GetActiveWriteJob` 恢复已输出的流式正文。
 
-- [ ] Discover 构思对话页
-- [ ] 设定集 / 大纲 Markdown 编辑
-- [ ] 审查、记忆、导出
+## CLI vs Desktop 能力对照
+
+| 能力 | CLI | Desktop |
+|------|-----|---------|
+| 探讨立项 Discover | ✅ | ✅ |
+| 初始化 / 创建小说 | ✅ | ✅ |
+| 卷纲规划 | ✅ | ✅ |
+| AI 写章（流式） | ✅ | ✅ |
+| 章节审查 | ✅ | ✅ |
+| Coach 改稿 | ✅ | ✅ |
+| 记忆 / 伏笔管理 | ✅ | ✅ |
+| 导出 EPUB | ✅ | ✅ |
+| 全文搜索 | ✅ | ✅ |
+| `nova learn` 反馈学记忆 | ✅ | — |
+| `nova backup` / `doctor` / `preflight` | ✅ | — |
+| 批量连续写章 | ✅ | — |
+| 新手引导 | — | ✅ |
+| Token 用量统计 | — | ✅ |
+
+完整 CLI 命令见 [README](../README.md)。

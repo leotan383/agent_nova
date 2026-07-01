@@ -1,5 +1,6 @@
-import { ArrowRight, BookOpen, ClipboardCheck, PenLine } from "lucide-react";
+import { formatTokenUsage } from "../lib/tokenUsage";
 import { WriteReportDTO } from "../lib/wails";
+import { ArrowRight, BookOpen, ClipboardCheck, PenLine } from "lucide-react";
 
 type Props = {
   chapter: number;
@@ -17,6 +18,7 @@ export default function WriteCompletionBar({
   onWriteNext,
 }: Props) {
   const ok = report.status === "completed";
+  const usageLine = report.token_usage ? formatTokenUsage(report.token_usage) : "";
 
   return (
     <div
@@ -33,6 +35,9 @@ export default function WriteCompletionBar({
           </p>
           {report.summary && (
             <p className="mt-1 text-xs text-studio-muted">{report.summary}</p>
+          )}
+          {usageLine && (
+            <p className="mt-1 text-xs text-studio-muted">本次 API 用量：{usageLine}</p>
           )}
           {report.issues && report.issues.length > 0 && (
             <ul className="mt-2 space-y-0.5 text-xs text-[rgb(var(--studio-warning-fg))]">

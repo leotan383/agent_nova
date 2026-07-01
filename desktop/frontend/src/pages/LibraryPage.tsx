@@ -414,15 +414,29 @@ export default function LibraryPage() {
             </div>
           )
         ) : novels.filter((n) => !n.archived).length === 0 ? (
-          <div className="flex flex-col items-center py-24 text-center">
+          <div className="flex flex-col items-center py-20 text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-studio-accent/10">
               <Sparkles className="h-7 w-7 text-studio-accent" />
             </div>
             <h2 className="text-lg font-medium">开始第一个故事</h2>
-            <p className="mt-2 max-w-sm text-sm leading-relaxed text-studio-muted">
-              用 AI 探讨立项，或打开磁盘上已有的 nova 项目。
+            <p className="mt-2 max-w-md text-sm leading-relaxed text-studio-muted">
+              三步完成第一本小说：探讨立项 → 规划卷纲 → AI 写第一章。
             </p>
-            <div className="mt-6 flex gap-3">
+            <ol className="mt-6 max-w-sm space-y-2 text-left text-sm text-studio-muted">
+              <li className="flex gap-2">
+                <span className="font-medium text-studio-accent">1.</span>
+                <span>点击「新建小说」，用 AI 探讨或表单创建设定</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="font-medium text-studio-accent">2.</span>
+                <span>进入工作室 → 规划 Tab，生成第 1 卷卷纲</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="font-medium text-studio-accent">3.</span>
+                <span>章节 Tab → AI 写章，约 30 分钟产出第一章</span>
+              </li>
+            </ol>
+            <div className="mt-8 flex gap-3">
               <button
                 type="button"
                 onClick={() => setShowCreate(true)}

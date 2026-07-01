@@ -3,21 +3,26 @@ import {
   BookOpen,
   Brain,
   ChevronRight,
+  Coins,
   FileText,
   GitBranch,
   Loader2,
   PenLine,
   Sparkles,
 } from "lucide-react";
-import { ProjectHealthDTO, StatusReport, app, formatWordCount, phaseLabel } from "../lib/wails";
+import { ProjectHealthDTO, ProjectTokenUsageDTO, StatusReport, app, formatWordCount, phaseLabel } from "../lib/wails";
+import { formatTokenUsage } from "../lib/tokenUsage";
+import OnboardingChecklist from "./OnboardingChecklist";
 import ProjectHealthPanel from "./ProjectHealthPanel";
 
 type Props = {
+  novelId: string;
   status: StatusReport;
   healthRefreshKey: number;
   onContinueWrite: () => void;
   onOpenPlanning: (volume?: number) => void;
   onOpenWrite: (chapter?: number) => void;
+  onOpenSettings: () => void;
   onRebuildIndex: () => Promise<void>;
   onReviewChapter: (chapter: number) => void;
   onGoToChapters: () => void;
@@ -27,11 +32,13 @@ type Props = {
 };
 
 export default function OverviewPanel({
+  novelId,
   status,
   healthRefreshKey,
   onContinueWrite,
   onOpenPlanning,
   onOpenWrite,
+  onOpenSettings,
   onRebuildIndex,
   onReviewChapter,
   onGoToChapters,
@@ -45,6 +52,14 @@ export default function OverviewPanel({
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 pb-4">
+      <OnboardingChecklist
+        novelId={novelId}
+        status={status}
+        onOpenSettings={onOpenSettings}
+        onOpenPlanning={onOpenPlanning}
+        onOpenWrite={() => onOpenWrite()}
+      />
+
       <section className="overflow-hidden rounded-2xl border border-studio-border bg-studio-panel shadow-sm">
         <div className="border-b border-studio-border/60 bg-gradient-to-br from-studio-accent/5 to-transparent px-6 py-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -122,6 +137,7 @@ export default function OverviewPanel({
           />
         </div>
         <div className="space-y-4 lg:col-span-2">
+          <TokenUsageCard refreshKey={healthRefreshKey} />
           <OverviewMetrics
             status={status}
             onGoToChapters={onGoToChapters}
@@ -136,6 +152,41 @@ export default function OverviewPanel({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function TokenUsageCard({ refreshKey }: { refreshKey: number }) {
+  const [usage, setUsage] = useState<ProjectTokenUsageDTO | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const u = await app().GetProjectTokenUsage();
+      setUsage(u);
+    } catch {
+      setUsage(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load, refreshKey]);
+
+  if (loading) return null;
+  if (!usage || usage.total_tokens <= 0) return null;
+
+  return (
+    <div className="rounded-xl border border-studio-border bg-studio-panel p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <Coins className="h-3.5 w-3.5 text-studio-muted" />
+        <h3 className="text-xs font-medium uppercase tracking-wide text-studio-muted">API 用量累计</h3>
+      </div>
+      <p className="text-sm font-medium text-studio-text">{formatTokenUsage(usage)}</p>
+      <p className="mt-1 text-[11px] text-studio-muted">写章流水线 token 粗估，成本按当前模型档位估算</p>
     </div>
   );
 }

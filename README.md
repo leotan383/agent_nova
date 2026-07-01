@@ -287,6 +287,24 @@ nova doctor
 nova write 12 --resume
 ```
 
+## Nova Studio 桌面端
+
+跨平台 GUI 覆盖书库、规划、写章、审查、改稿、记忆、Wiki、导出等核心流程。详见 [docs/desktop.md](docs/desktop.md)。
+
+产品路线图见 [docs/roadmap.md](docs/roadmap.md)。
+
+### CLI vs Desktop 能力对照
+
+| 能力 | CLI | Desktop |
+|------|-----|---------|
+| 探讨立项 / 创建小说 | ✅ | ✅ |
+| 卷纲规划 / AI 写章 | ✅ | ✅ |
+| 审查 / Coach 改稿 | ✅ | ✅ |
+| 记忆 / 伏笔 / 导出 | ✅ | ✅ |
+| `nova learn` / backup / doctor | ✅ | — |
+| 批量连续写章 | ✅ | — |
+| 新手引导 / Token 用量 | — | ✅ |
+
 ## 开发与测试
 
 ```bash

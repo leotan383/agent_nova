@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/tanlian/agent_nova/internal/app"
 	"github.com/tanlian/agent_nova/internal/config"
 	"github.com/tanlian/agent_nova/internal/report"
+	"github.com/tanlian/agent_nova/internal/usage"
 	"github.com/tanlian/agent_nova/internal/workflows"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -37,19 +39,71 @@ type WriteJobInfo struct {
 	Status  string `json:"status"`
 }
 
+// WriteJobStateDTO 写章任务实时状态（用于 UI 重连恢复流式内容）。
+type WriteJobStateDTO struct {
+	StreamText  string `json:"stream_text"`
+	Step        string `json:"step"`
+	StepMessage string `json:"step_message"`
+}
+
+// TokenUsageDTO LLM token 用量。
+type TokenUsageDTO struct {
+	PromptTokens     int     `json:"prompt_tokens"`
+	CompletionTokens int     `json:"completion_tokens"`
+	TotalTokens      int     `json:"total_tokens"`
+	EstimatedCostUSD float64 `json:"estimated_cost_usd,omitempty"`
+}
+
 // WriteReportDTO 写章结果。
 type WriteReportDTO struct {
-	Stage     string   `json:"stage"`
-	Status    string   `json:"status"`
-	Summary   string   `json:"summary"`
-	Artifacts []string `json:"artifacts,omitempty"`
-	Issues    []string `json:"issues,omitempty"`
-	NextSteps []string `json:"next_steps,omitempty"`
+	Stage      string         `json:"stage"`
+	Status     string         `json:"status"`
+	Summary    string         `json:"summary"`
+	Artifacts  []string       `json:"artifacts,omitempty"`
+	Issues     []string       `json:"issues,omitempty"`
+	NextSteps  []string       `json:"next_steps,omitempty"`
+	TokenUsage *TokenUsageDTO `json:"token_usage,omitempty"`
+}
+
+// ProjectTokenUsageDTO 项目累计 token 用量。
+type ProjectTokenUsageDTO struct {
+	PromptTokens     int     `json:"prompt_tokens"`
+	CompletionTokens int     `json:"completion_tokens"`
+	TotalTokens      int     `json:"total_tokens"`
+	WriteRuns        int     `json:"write_runs"`
+	EstimatedCostUSD float64 `json:"estimated_cost_usd,omitempty"`
 }
 
 type writeJob struct {
 	info   WriteJobInfo
 	cancel context.CancelFunc
+	mu     sync.Mutex
+	buf    strings.Builder
+	step   string
+	stepMsg string
+}
+
+func (j *writeJob) appendDelta(delta string) {
+	j.mu.Lock()
+	j.buf.WriteString(delta)
+	j.mu.Unlock()
+}
+
+func (j *writeJob) setStep(step, message string) {
+	j.mu.Lock()
+	j.step = step
+	j.stepMsg = message
+	j.mu.Unlock()
+}
+
+func (j *writeJob) snapshot() WriteJobStateDTO {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return WriteJobStateDTO{
+		StreamText:  j.buf.String(),
+		Step:        j.step,
+		StepMessage: j.stepMsg,
+	}
 }
 
 type writeManager struct {
@@ -108,10 +162,9 @@ func (a *App) StartWriteChapter(in StartWriteInput) (WriteJobInfo, error) {
 
 	a.emitWriteStatus(id, in.Chapter, "pending", "")
 
-	// 释放 UI 侧 session，写章期间使用独立连接，避免 SQLITE_BUSY
 	a.session.invalidate()
 
-	go func(projectRoot string, chapter, volume int, resume bool) {
+	go func(projectRoot string, chapter, volume int, resume bool, jobRef *writeJob) {
 		defer cancel()
 		actx, err := app.LoadContext(projectRoot)
 		if err != nil {
@@ -134,6 +187,7 @@ func (a *App) StartWriteChapter(in StartWriteInput) (WriteJobInfo, error) {
 					return ctx.Err()
 				default:
 				}
+				jobRef.appendDelta(delta)
 				a.emitWriteDelta(id, chapter, delta)
 				return nil
 			},
@@ -143,6 +197,7 @@ func (a *App) StartWriteChapter(in StartWriteInput) (WriteJobInfo, error) {
 					return ctx.Err()
 				default:
 				}
+				jobRef.setStep(step, message)
 				a.emitWriteStep(id, chapter, step, message)
 				return nil
 			},
@@ -174,7 +229,7 @@ func (a *App) StartWriteChapter(in StartWriteInput) (WriteJobInfo, error) {
 		a.emitWriteDone(id, chapter, rep)
 		a.emitWriteStatus(id, chapter, "done", rep.Summary)
 		a.session.invalidate()
-	}(root, in.Chapter, in.Volume, in.Resume)
+	}(root, in.Chapter, in.Volume, in.Resume, job)
 
 	return job.info, nil
 }
@@ -216,6 +271,17 @@ func (a *App) GetWriteJob(jobID string) (WriteJobInfo, error) {
 	return job.info, nil
 }
 
+// GetWriteJobState 返回任务流式缓冲与步骤（切换 Tab 后恢复用）。
+func (a *App) GetWriteJobState(jobID string) (WriteJobStateDTO, error) {
+	a.write.mu.Lock()
+	defer a.write.mu.Unlock()
+	job, ok := a.write.jobs[jobID]
+	if !ok {
+		return WriteJobStateDTO{}, fmt.Errorf("任务不存在: %s", jobID)
+	}
+	return job.snapshot(), nil
+}
+
 // IsWriteRunning 是否有进行中的写章。
 func (a *App) IsWriteRunning() bool {
 	a.write.mu.Lock()
@@ -230,8 +296,9 @@ func (a *App) IsWriteRunning() bool {
 
 // ActiveWriteJobDTO 进行中的写章任务（用于 UI 恢复）。
 type ActiveWriteJobDTO struct {
-	Active bool         `json:"active"`
-	Job    WriteJobInfo `json:"job"`
+	Active bool             `json:"active"`
+	Job    WriteJobInfo     `json:"job"`
+	State  WriteJobStateDTO `json:"state"`
 }
 
 // GetActiveWriteJob 返回进行中的写章任务，若无则 active=false。
@@ -240,10 +307,39 @@ func (a *App) GetActiveWriteJob() ActiveWriteJobDTO {
 	defer a.write.mu.Unlock()
 	for _, j := range a.write.jobs {
 		if j.info.Status == "running" || j.info.Status == "pending" {
-			return ActiveWriteJobDTO{Active: true, Job: j.info}
+			return ActiveWriteJobDTO{Active: true, Job: j.info, State: j.snapshot()}
 		}
 	}
 	return ActiveWriteJobDTO{}
+}
+
+// GetProjectTokenUsage 返回当前小说累计 LLM token 用量。
+func (a *App) GetProjectTokenUsage() (ProjectTokenUsageDTO, error) {
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return ProjectTokenUsageDTO{}, err
+	}
+	root := reg.ActivePath()
+	if root == "" {
+		return ProjectTokenUsageDTO{}, errNoActiveProject
+	}
+	stats, err := usage.Load(root)
+	if err != nil {
+		return ProjectTokenUsageDTO{}, err
+	}
+	cfg, _ := config.Load()
+	model := ""
+	if cfg != nil {
+		model = cfg.Model
+	}
+	total := stats.TotalTokens()
+	return ProjectTokenUsageDTO{
+		PromptTokens:     stats.PromptTokens,
+		CompletionTokens: stats.CompletionTokens,
+		TotalTokens:      total,
+		WriteRuns:        stats.WriteRuns,
+		EstimatedCostUSD: usage.EstimateCostUSD(model, stats.PromptTokens, stats.CompletionTokens),
+	}, nil
 }
 
 func (a *App) emitWriteDelta(jobID string, chapter int, delta string) {
@@ -274,6 +370,14 @@ func (a *App) emitWriteDone(jobID string, chapter int, rep *report.Report) {
 	dto := WriteReportDTO{
 		Stage: rep.Stage, Status: string(rep.Status), Summary: rep.Summary,
 		Artifacts: rep.Artifacts, Issues: rep.Issues, NextSteps: rep.NextSteps,
+	}
+	if rep.TokenUsage != nil {
+		dto.TokenUsage = &TokenUsageDTO{
+			PromptTokens:     rep.TokenUsage.PromptTokens,
+			CompletionTokens: rep.TokenUsage.CompletionTokens,
+			TotalTokens:      rep.TokenUsage.TotalTokens,
+			EstimatedCostUSD: rep.TokenUsage.EstimatedCostUSD,
+		}
 	}
 	raw, _ := json.Marshal(dto)
 	runtime.EventsEmit(a.ctx, eventWriteDone, map[string]any{

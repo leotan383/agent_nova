@@ -17,6 +17,7 @@ import (
 	"github.com/tanlian/agent_nova/internal/report"
 	"github.com/tanlian/agent_nova/internal/store"
 	"github.com/tanlian/agent_nova/internal/tools"
+	"github.com/tanlian/agent_nova/internal/usage"
 	"github.com/tanlian/agent_nova/internal/version"
 )
 
@@ -44,6 +45,11 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 		if opts.OnStep != nil {
 			_ = opts.OnStep(step, msg)
 		}
+	}
+	var usageAcc agent.UsageAccumulator
+	withUsage := func(in agent.RunInput) agent.RunInput {
+		in.UsageAcc = &usageAcc
+		return in
 	}
 
 	// 写前 gate：检查 phase、卷纲、上一章摘要、索引是否过期
@@ -82,21 +88,21 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 	if startStep == "draft" {
 		anchor := cb.BookContext(opts.Chapter, opts.Volume)
 		emit("taskbook", "生成写作任务书")
-		taskBook, err := w.Agent.Run(ctx, agent.RunInput{
+		taskBook, err := w.Agent.Run(ctx, withUsage(agent.RunInput{
 			SystemPrompt: prompts.ContextSystem(anchor),
 			UserPrompt:   snap.ToContextPrompt() + "\n请输出写作任务书。",
-		})
+		}))
 		if err != nil {
 			return nil, err
 		}
 
 		emit("draft", "起草正文")
-		content, err = w.Agent.Run(ctx, agent.RunInput{
+		content, err = w.Agent.Run(ctx, withUsage(agent.RunInput{
 			SystemPrompt: prompts.WriteSystem(anchor),
 			UserPrompt:   snap.ToWriteUserPrompt(taskBook),
 			Stream:       opts.Stream,
 			OnDelta:      opts.OnDelta,
-		})
+		}))
 		if err != nil {
 			ledger.Record("draft", "failed", err.Error())
 			_ = ledger.Save(p.RunLedgerPath())
@@ -124,7 +130,7 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 		if outlineRef == "" {
 			outlineRef = snap.VolumeOutline
 		}
-		reviewed, err := w.Agent.Run(ctx, agent.RunInput{
+		reviewed, err := w.Agent.Run(ctx, withUsage(agent.RunInput{
 			SystemPrompt: prompts.ReviewSystem(anchor),
 			UserPrompt: fmt.Sprintf(`【本章章纲】
 %s
@@ -134,7 +140,7 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 
 【正文】
 %s`, outlineRef, snap.OpenForeshadows, content),
-		})
+		}))
 		if err != nil {
 			ledger.Record("review", "failed", err.Error())
 			_ = ledger.Save(p.RunLedgerPath())
@@ -160,10 +166,10 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 
 	// Step 3: 摘要 — 供后续章节上下文链使用
 	emit("summary", "生成章节摘要")
-	summary, err := w.Agent.Run(ctx, agent.RunInput{
+	summary, err := w.Agent.Run(ctx, withUsage(agent.RunInput{
 		SystemPrompt: prompts.SummarySystem(),
 		UserPrompt:   fmt.Sprintf("请为以下章节生成摘要：\n\n%s", content),
-	})
+	}))
 	if err != nil {
 		return &report.Report{Stage: fmt.Sprintf("写章 第%d章", opts.Chapter), Status: report.StatusPartial,
 			Summary: "正文已保存，摘要失败", Artifacts: []string{chapterPath}, Issues: []string{err.Error()}}, nil
@@ -183,11 +189,20 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 	ledger.Record("commit", "done", "ok")
 	_ = ledger.Save(p.RunLedgerPath())
 	emit("done", "写章完成")
+	tu := usageAcc.Snapshot()
+	tokenUsage := &report.TokenUsage{
+		PromptTokens:     tu.PromptTokens,
+		CompletionTokens: tu.CompletionTokens,
+		TotalTokens:      tu.Total(),
+		EstimatedCostUSD: usage.EstimateCostUSD(w.Agent.Model(), tu.PromptTokens, tu.CompletionTokens),
+	}
+	_, _ = usage.AddWriteRun(p.Root, tu.PromptTokens, tu.CompletionTokens)
 	return &report.Report{
 		Stage: fmt.Sprintf("写章 第%d章", opts.Chapter), Status: report.StatusDone,
 		Summary: fmt.Sprintf("第 %d 章已完成，约 %d 字", opts.Chapter, utf8.RuneCountInString(content)),
 		Artifacts: []string{chapterPath, p.SummaryPath(opts.Chapter)},
 		NextSteps: []string{fmt.Sprintf("nova review %d", opts.Chapter), fmt.Sprintf("nova write %d", opts.Chapter+1)},
+		TokenUsage: tokenUsage,
 	}, nil
 }
 

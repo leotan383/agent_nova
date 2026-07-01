@@ -99,6 +99,27 @@ export interface WriteJobInfo {
   status: string;
 }
 
+export interface WriteJobStateDTO {
+  stream_text: string;
+  step: string;
+  step_message: string;
+}
+
+export interface TokenUsageDTO {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd?: number;
+}
+
+export interface ProjectTokenUsageDTO {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  write_runs: number;
+  estimated_cost_usd?: number;
+}
+
 export interface WriteReportDTO {
   stage: string;
   status: string;
@@ -106,6 +127,7 @@ export interface WriteReportDTO {
   artifacts?: string[];
   issues?: string[];
   next_steps?: string[];
+  token_usage?: TokenUsageDTO;
 }
 
 export interface TodoItemDTO {
@@ -182,6 +204,7 @@ export interface ChapterReviewMetricsDTO {
 export interface ActiveWriteJobDTO {
   active: boolean;
   job: WriteJobInfo;
+  state: WriteJobStateDTO;
 }
 
 export interface ActivePlanJobDTO {
@@ -449,8 +472,10 @@ interface AppBindings {
   StartWriteChapter(input: StartWriteInput): Promise<WriteJobInfo>;
   CancelWriteChapter(jobID: string): Promise<void>;
   GetWriteJob(jobID: string): Promise<WriteJobInfo>;
+  GetWriteJobState(jobID: string): Promise<WriteJobStateDTO>;
   IsWriteRunning(): Promise<boolean>;
   GetActiveWriteJob(): Promise<ActiveWriteJobDTO>;
+  GetProjectTokenUsage(): Promise<ProjectTokenUsageDTO>;
   GetVolumeOutline(volume: number): Promise<VolumeOutlineDTO>;
   SaveVolumeOutline(volume: number, body: string): Promise<void>;
   StartPlanVolume(input: StartPlanInput): Promise<PlanJobInfo>;
