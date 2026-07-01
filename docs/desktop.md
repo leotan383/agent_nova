@@ -93,6 +93,7 @@ desktop/
 |------|------|
 | `StartDiscover` / `SendDiscoverMessage` / `FinishDiscover` / `CreateNovelFromDiscover` | AI 探讨立项 |
 | `StartPlanVolume` / `CancelPlanVolume` | AI 生成卷纲 |
+| `StartReplanVolume` / `PreviewVolumeOutlineDiff` | 基于已写内容 Replan（diff 确认后 `SaveVolumeOutline` 应用） |
 | `StartWriteChapter` / `CancelWriteChapter` | 流式写章（`skip_review`、记忆 pin/排除、`resume`） |
 | `GetWriteJob` / `GetWriteJobState` / `GetActiveWriteJob` | 写章任务状态与流式缓冲恢复 |
 | `GetWriteResumeInfo` | 断点续写：run_ledger 是否可续跑及停在哪一步 |
@@ -136,6 +137,7 @@ desktop/
 | 探讨立项 Discover | ✅ | ✅ |
 | 初始化 / 创建小说 | ✅ | ✅ |
 | 卷纲规划 | ✅ | ✅ |
+| 卷纲 Replan（已写后调整） | ✅ `nova plan replan` | ✅ 规划页 Replan + diff |
 | AI 写章（流式） | ✅ | ✅ |
 | 章节审查 | ✅ | ✅ |
 | Coach 改稿 | ✅ | ✅ |

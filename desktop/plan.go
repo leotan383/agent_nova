@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/tanlian/agent_nova/internal/config"
 	"github.com/tanlian/agent_nova/internal/index"
 	"github.com/tanlian/agent_nova/internal/report"
+	"github.com/tanlian/agent_nova/internal/version"
 	"github.com/tanlian/agent_nova/internal/workflows"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -27,11 +29,19 @@ type StartPlanInput struct {
 	Volume int `json:"volume"`
 }
 
+// StartReplanInput 动态卷纲 Replan 请求。
+type StartReplanInput struct {
+	Volume      int    `json:"volume"`
+	FromChapter int    `json:"from_chapter"`
+	Notes       string `json:"notes"`
+}
+
 // PlanJobInfo 卷纲任务信息。
 type PlanJobInfo struct {
 	ID     string `json:"id"`
 	Volume int    `json:"volume"`
 	Status string `json:"status"`
+	Kind   string `json:"kind"` // plan | replan
 }
 
 // PlanReportDTO 卷纲生成结果。
@@ -49,6 +59,16 @@ type VolumeOutlineDTO struct {
 	Path   string `json:"path"`
 	Body   string `json:"body"`
 	Exists bool   `json:"exists"`
+}
+
+// ReplanResultDTO Replan 产出（待确认应用）。
+type ReplanResultDTO struct {
+	Volume         int    `json:"volume"`
+	FromChapter    int    `json:"from_chapter"`
+	WrittenThrough int    `json:"written_through"`
+	ProposedBody   string `json:"proposed_body"`
+	OldBody        string `json:"old_body"`
+	Summary        string `json:"summary"`
 }
 
 type planJob struct {
@@ -154,7 +174,7 @@ func (a *App) StartPlanVolume(in StartPlanInput) (PlanJobInfo, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &planJob{
 		info: PlanJobInfo{
-			ID: id, Volume: in.Volume, Status: "pending",
+			ID: id, Volume: in.Volume, Status: "pending", Kind: "plan",
 		},
 		cancel: cancel,
 	}
@@ -206,6 +226,124 @@ func (a *App) StartPlanVolume(in StartPlanInput) (PlanJobInfo, error) {
 		a.emitPlanStatus(id, volume, "done", rep.Summary)
 		a.session.invalidate()
 	}(root, in.Volume)
+
+	return job.info, nil
+}
+
+// PreviewVolumeOutlineDiff 对比当前卷纲与 Replan 草案。
+func (a *App) PreviewVolumeOutlineDiff(volume int, newBody string) (DiffResultDTO, error) {
+	newBody = strings.TrimSpace(newBody)
+	if volume <= 0 {
+		return DiffResultDTO{}, fmt.Errorf("无效卷号")
+	}
+	if newBody == "" {
+		return DiffResultDTO{}, fmt.Errorf("卷纲内容不能为空")
+	}
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return DiffResultDTO{}, err
+	}
+	var result DiffResultDTO
+	err = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		path := actx.Project.VolumeOutlinePath(volume)
+		oldBody, readErr := os.ReadFile(path)
+		if readErr != nil && !os.IsNotExist(readErr) {
+			return readErr
+		}
+		diff := version.DiffTexts("current", "proposed", "当前卷纲", "新卷纲", string(oldBody), newBody)
+		result = toDiffDTO(diff)
+		return nil
+	})
+	return result, err
+}
+
+// StartReplanVolume 异步 Replan 卷纲（生成草案，不直接写入）。
+func (a *App) StartReplanVolume(in StartReplanInput) (PlanJobInfo, error) {
+	if in.Volume <= 0 {
+		return PlanJobInfo{}, fmt.Errorf("请指定有效卷号")
+	}
+
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return PlanJobInfo{}, err
+	}
+	root := reg.ActivePath()
+	if root == "" {
+		return PlanJobInfo{}, errNoActiveProject
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return PlanJobInfo{}, err
+	}
+	if err := app.RequireAPIKey(cfg); err != nil {
+		return PlanJobInfo{}, err
+	}
+
+	a.plan.mu.Lock()
+	for _, j := range a.plan.jobs {
+		if j.info.Status == "running" || j.info.Status == "pending" {
+			a.plan.mu.Unlock()
+			return PlanJobInfo{}, fmt.Errorf("已有卷纲任务进行中（第 %d 卷）", j.info.Volume)
+		}
+	}
+
+	id := fmt.Sprintf("replan-%d-%d", in.Volume, time.Now().Unix())
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &planJob{
+		info: PlanJobInfo{
+			ID: id, Volume: in.Volume, Status: "pending", Kind: "replan",
+		},
+		cancel: cancel,
+	}
+	a.plan.jobs[id] = job
+	a.plan.mu.Unlock()
+
+	a.emitPlanStatus(id, in.Volume, "pending", "")
+
+	a.session.invalidate()
+
+	go func(projectRoot string, volume, fromChapter int, notes string) {
+		defer cancel()
+		actx, err := app.LoadContext(projectRoot)
+		if err != nil {
+			a.failPlanJob(id, volume, err.Error())
+			return
+		}
+		defer actx.Close()
+
+		a.emitPlanStatus(id, volume, "running", "正在基于已写内容重新规划卷纲…")
+
+		wf := workflows.NewPlanWorkflow(actx.Config, actx.Project, actx.Store)
+		result, err := wf.ReplanVolume(ctx, actx.Project, actx.Store, workflows.ReplanOptions{
+			Volume: volume, FromChapter: fromChapter, Notes: notes,
+		})
+
+		a.plan.mu.Lock()
+		if j, ok := a.plan.jobs[id]; ok {
+			if err != nil {
+				if ctx.Err() != nil {
+					j.info.Status = "cancelled"
+				} else {
+					j.info.Status = "failed"
+				}
+			} else {
+				j.info.Status = "done"
+			}
+		}
+		a.plan.mu.Unlock()
+
+		if err != nil {
+			if ctx.Err() != nil {
+				a.emitPlanStatus(id, volume, "cancelled", "已取消")
+				return
+			}
+			a.emitPlanError(id, volume, err.Error())
+			a.emitPlanStatus(id, volume, "failed", err.Error())
+			return
+		}
+		a.emitPlanReplanDone(id, volume, result)
+		a.emitPlanStatus(id, volume, "done", result.Report.Summary)
+	}(root, in.Volume, in.FromChapter, in.Notes)
 
 	return job.info, nil
 }
@@ -285,6 +423,20 @@ func (a *App) emitPlanDone(jobID string, volume int, rep *report.Report) {
 	}
 	raw, _ := json.Marshal(dto)
 	runtime.EventsEmit(a.ctx, eventPlanDone, map[string]any{
-		"job_id": jobID, "volume": volume, "report": string(raw),
+		"job_id": jobID, "volume": volume, "report": string(raw), "kind": "plan",
+	})
+}
+
+func (a *App) emitPlanReplanDone(jobID string, volume int, result *workflows.ReplanResult) {
+	dto := ReplanResultDTO{
+		Volume: volume, FromChapter: result.FromChapter,
+		WrittenThrough: result.WrittenThrough,
+		ProposedBody:   result.ProposedContent,
+		OldBody:        result.OldContent,
+		Summary:        result.Report.Summary,
+	}
+	raw, _ := json.Marshal(dto)
+	runtime.EventsEmit(a.ctx, eventPlanDone, map[string]any{
+		"job_id": jobID, "volume": volume, "kind": "replan", "replan": string(raw),
 	})
 }

@@ -56,11 +56,18 @@ export default function OnboardingChecklist({
   onOpenPlanning,
   onOpenWrite,
 }: Props) {
-  const [hasKey, setHasKey] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [hasKey, setHasKey] = useState(false);
   const [health, setHealth] = useState<ProjectHealthDTO | null>(null);
   const [dismissed, setDismissed] = useState(() => isOnboardingDismissed(novelId));
 
+  useEffect(() => {
+    setDismissed(isOnboardingDismissed(novelId));
+    setLoaded(false);
+  }, [novelId]);
+
   const load = useCallback(async () => {
+    setLoaded(false);
     try {
       const [keyOk, h] = await Promise.all([app().HasAPIKey(), app().GetProjectHealth()]);
       setHasKey(keyOk);
@@ -68,18 +75,21 @@ export default function OnboardingChecklist({
     } catch {
       setHasKey(false);
       setHealth(null);
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, novelId]);
 
   const hasOutline = health?.has_volume_outline ?? false;
   const hasChapter = status.chapter_count > 0;
   const allDone = hasKey && hasOutline && hasChapter;
 
-  if (dismissed || allDone) return null;
+  // 等 health / API Key 拉取完成再决定是否展示，避免已完成用户看到 ~1s 闪屏
+  if (!loaded || dismissed || allDone) return null;
 
   const steps: Step[] = [
     {

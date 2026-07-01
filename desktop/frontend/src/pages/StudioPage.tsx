@@ -520,6 +520,7 @@ export default function StudioPage() {
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <VolumePlanPanel
                 suggestedVolume={status.current_volume || 1}
+                currentChapter={status.current_chapter}
                 focusVolume={planFocusVolume}
                 onComplete={handlePlanComplete}
               />

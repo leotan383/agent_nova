@@ -159,10 +159,26 @@ export interface StartPlanInput {
   volume: number;
 }
 
+export interface StartReplanInput {
+  volume: number;
+  from_chapter?: number;
+  notes?: string;
+}
+
 export interface PlanJobInfo {
   id: string;
   volume: number;
   status: string;
+  kind?: string;
+}
+
+export interface ReplanResultDTO {
+  volume: number;
+  from_chapter: number;
+  written_through: number;
+  proposed_body: string;
+  old_body: string;
+  summary: string;
 }
 
 export interface PlanReportDTO {
@@ -608,6 +624,8 @@ interface AppBindings {
   GetVolumeOutline(volume: number): Promise<VolumeOutlineDTO>;
   SaveVolumeOutline(volume: number, body: string): Promise<void>;
   StartPlanVolume(input: StartPlanInput): Promise<PlanJobInfo>;
+  StartReplanVolume(input: StartReplanInput): Promise<PlanJobInfo>;
+  PreviewVolumeOutlineDiff(volume: number, newBody: string): Promise<DiffResultDTO>;
   CancelPlanVolume(jobID: string): Promise<void>;
   IsPlanRunning(): Promise<boolean>;
   GetActivePlanJob(): Promise<ActivePlanJobDTO>;

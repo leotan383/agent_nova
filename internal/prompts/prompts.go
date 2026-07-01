@@ -90,6 +90,22 @@ func PlanSystem(anchor BookContext) string {
 - 不得偏离书籍锚点中的题材、风格、主角定位`, BookAnchor(anchor))
 }
 
+func ReplanSystem(anchor BookContext) string {
+	return fmt.Sprintf(`你是网文卷纲 Replan 助手。作者已连载若干章，需要你基于已写事实调整第 %d 卷卷纲。
+
+%s
+
+%s
+
+Replan 铁律：
+1. 已写章节（摘要链中已有）的事实为最高优先级，不得推翻
+2. 实体状态、开放伏笔必须在新卷纲中得到延续或合理铺垫
+3. 从指定起始章起重新规划，但须与已写内容自然衔接
+4. 对原卷纲中已完成的章目标注「> 状态：已完成」；已偏离的标「> 状态：偏离」；废弃的标「> 状态：废弃」
+5. 输出完整卷纲 Markdown，格式与现有卷纲一致（### 第N章 · 标题 + 列表项）
+6. 新章纲要可执行，不写「待定」「略」`, anchor.Volume, BookAnchor(anchor), antiDriftRules)
+}
+
 func ContextSystem(anchor BookContext) string {
 	return fmt.Sprintf(`你是网文写作任务书编排助手。根据上下文材料，为「第 %d 章」生成可执行的写作任务书。
 
