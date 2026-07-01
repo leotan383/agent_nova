@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   BookMarked,
@@ -39,6 +39,8 @@ type NavSnapshot = {
 
 export default function StudioPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const pendingOpenWrite = useRef(false);
   const [novels, setNovels] = useState<NovelCard[]>([]);
   const [activeId, setActiveId] = useState("");
   const [status, setStatus] = useState<StatusReport | null>(null);
@@ -134,6 +136,19 @@ export default function StudioPage() {
     setChaptersView("write");
     setTab("chapters");
   };
+
+  useEffect(() => {
+    if ((location.state as { openWrite?: boolean } | null)?.openWrite) {
+      pendingOpenWrite.current = true;
+      navigate("/studio", { replace: true, state: {} });
+    }
+  }, [location.state, navigate]);
+
+  useEffect(() => {
+    if (!pendingOpenWrite.current || !status) return;
+    pendingOpenWrite.current = false;
+    void openWriteMode();
+  }, [status, tab, chaptersView]);
 
   const refreshChapterView = () => {
     setChapterRefreshKey((k) => k + 1);
