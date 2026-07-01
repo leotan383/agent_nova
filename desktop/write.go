@@ -26,17 +26,21 @@ const (
 
 // StartWriteInput 写章请求。
 type StartWriteInput struct {
-	Chapter int  `json:"chapter"`
-	Volume  int  `json:"volume"`
-	Resume  bool `json:"resume"`
+	Chapter         int  `json:"chapter"`
+	EndChapter      int  `json:"end_chapter"` // 0 或与 chapter 相同表示单章；大于 chapter 时连续写多章
+	Volume          int  `json:"volume"`
+	Resume          bool `json:"resume"`
+	ContinueOnError bool `json:"continue_on_error"`
 }
 
 // WriteJobInfo 写章任务信息（立即返回，进度走事件）。
 type WriteJobInfo struct {
-	ID      string `json:"id"`
-	Chapter int    `json:"chapter"`
-	Volume  int    `json:"volume"`
-	Status  string `json:"status"`
+	ID            string `json:"id"`
+	Chapter       int    `json:"chapter"`
+	Volume        int    `json:"volume"`
+	Status        string `json:"status"`
+	TotalInBatch  int    `json:"total_in_batch"`
+	BatchIndex    int    `json:"batch_index"`
 }
 
 // WriteJobStateDTO 写章任务实时状态（用于 UI 重连恢复流式内容）。
@@ -81,6 +85,11 @@ type writeJob struct {
 	buf    strings.Builder
 	step   string
 	stepMsg string
+	chapters        []int
+	chapterIdx      int
+	continueOnError bool
+	volume          int
+	resume          bool
 }
 
 func (j *writeJob) appendDelta(delta string) {
@@ -124,6 +133,16 @@ func (a *App) StartWriteChapter(in StartWriteInput) (WriteJobInfo, error) {
 	if in.Volume <= 0 {
 		in.Volume = 1
 	}
+	end := in.Chapter
+	if in.EndChapter > in.Chapter {
+		end = in.EndChapter
+	} else if in.EndChapter > 0 && in.EndChapter < in.Chapter {
+		return WriteJobInfo{}, fmt.Errorf("结束章号不能小于起始章号")
+	}
+	var chapters []int
+	for ch := in.Chapter; ch <= end; ch++ {
+		chapters = append(chapters, ch)
+	}
 
 	reg, err := a.loadRegistry()
 	if err != nil {
@@ -152,34 +171,61 @@ func (a *App) StartWriteChapter(in StartWriteInput) (WriteJobInfo, error) {
 	id := fmt.Sprintf("write-%d-%d", in.Chapter, time.Now().Unix())
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &writeJob{
+		chapters: chapters, chapterIdx: 0,
+		continueOnError: in.ContinueOnError, volume: in.Volume, resume: in.Resume,
 		info: WriteJobInfo{
-			ID: id, Chapter: in.Chapter, Volume: in.Volume, Status: "pending",
+			ID: id, Chapter: chapters[0], Volume: in.Volume, Status: "pending",
+			TotalInBatch: len(chapters), BatchIndex: 1,
 		},
 		cancel: cancel,
 	}
 	a.write.jobs[id] = job
 	a.write.mu.Unlock()
 
-	a.emitWriteStatus(id, in.Chapter, "pending", "")
+	a.emitWriteStatus(id, chapters[0], "pending", "")
 
 	a.session.invalidate()
 
-	go func(projectRoot string, chapter, volume int, resume bool, jobRef *writeJob) {
-		defer cancel()
+	go a.runWriteBatch(ctx, root, id, job)
+
+	return job.info, nil
+}
+
+func (a *App) runWriteBatch(ctx context.Context, projectRoot, id string, job *writeJob) {
+	defer job.cancel()
+	for i, chapter := range job.chapters {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		a.write.mu.Lock()
+		job.chapterIdx = i
+		job.info.Chapter = chapter
+		job.info.BatchIndex = i + 1
+		job.info.TotalInBatch = len(job.chapters)
+		job.mu.Lock()
+		job.buf.Reset()
+		job.step = ""
+		job.stepMsg = ""
+		job.mu.Unlock()
+		a.write.mu.Unlock()
+
+		a.emitWriteStatus(id, chapter, "running", fmt.Sprintf("批量 %d/%d", i+1, len(job.chapters)))
+
 		actx, err := app.LoadContext(projectRoot)
 		if err != nil {
 			a.failJob(id, chapter, err.Error())
 			return
 		}
-		defer actx.Close()
-
-		a.emitWriteStatus(id, chapter, "running", "")
 
 		wf := workflows.NewWriteWorkflow(actx.Config, actx.Project, actx.Store)
+		useResume := job.resume && i == 0
 		rep, err := wf.WriteChapter(ctx, actx.Project, actx.Store, workflows.WriteOptions{
 			Chapter: chapter,
-			Volume:  volume,
-			Resume:  resume,
+			Volume:  job.volume,
+			Resume:  useResume,
 			Stream:  true,
 			OnDelta: func(delta string) error {
 				select {
@@ -187,7 +233,7 @@ func (a *App) StartWriteChapter(in StartWriteInput) (WriteJobInfo, error) {
 					return ctx.Err()
 				default:
 				}
-				jobRef.appendDelta(delta)
+				job.appendDelta(delta)
 				a.emitWriteDelta(id, chapter, delta)
 				return nil
 			},
@@ -197,41 +243,57 @@ func (a *App) StartWriteChapter(in StartWriteInput) (WriteJobInfo, error) {
 					return ctx.Err()
 				default:
 				}
-				jobRef.setStep(step, message)
+				job.setStep(step, message)
 				a.emitWriteStep(id, chapter, step, message)
 				return nil
 			},
 		})
-
-		a.write.mu.Lock()
-		if j, ok := a.write.jobs[id]; ok {
-			if err != nil {
-				if ctx.Err() != nil {
-					j.info.Status = "cancelled"
-				} else {
-					j.info.Status = "failed"
-				}
-			} else {
-				j.info.Status = "done"
-			}
-		}
-		a.write.mu.Unlock()
+		actx.Close()
 
 		if err != nil {
 			if ctx.Err() != nil {
+				a.setJobStatus(id, "cancelled")
 				a.emitWriteStatus(id, chapter, "cancelled", "已取消")
 				return
 			}
 			a.emitWriteError(id, chapter, err.Error())
 			a.emitWriteStatus(id, chapter, "failed", err.Error())
+			if job.continueOnError && i+1 < len(job.chapters) {
+				continue
+			}
+			a.setJobStatus(id, "failed")
 			return
 		}
-		a.emitWriteDone(id, chapter, rep)
+
+		a.emitWriteDone(id, chapter, rep, i+1 >= len(job.chapters), i+1, len(job.chapters))
+		if rep.Status == report.StatusNeedsAction || rep.Status == report.StatusFailed {
+			a.emitWriteStatus(id, chapter, "failed", rep.Summary)
+			if !job.continueOnError {
+				a.setJobStatus(id, "failed")
+				return
+			}
+			continue
+		}
+
+		if i+1 < len(job.chapters) {
+			continue
+		}
+
+		a.setJobStatus(id, "done")
 		a.emitWriteStatus(id, chapter, "done", rep.Summary)
 		a.session.invalidate()
-	}(root, in.Chapter, in.Volume, in.Resume, job)
+		return
+	}
+	a.setJobStatus(id, "done")
+	a.session.invalidate()
+}
 
-	return job.info, nil
+func (a *App) setJobStatus(id, status string) {
+	a.write.mu.Lock()
+	if j, ok := a.write.jobs[id]; ok {
+		j.info.Status = status
+	}
+	a.write.mu.Unlock()
 }
 
 func (a *App) failJob(id string, chapter int, errMsg string) {
@@ -366,7 +428,7 @@ func (a *App) emitWriteError(jobID string, chapter int, errMsg string) {
 	})
 }
 
-func (a *App) emitWriteDone(jobID string, chapter int, rep *report.Report) {
+func (a *App) emitWriteDone(jobID string, chapter int, rep *report.Report, batchComplete bool, batchIndex, totalInBatch int) {
 	dto := WriteReportDTO{
 		Stage: rep.Stage, Status: string(rep.Status), Summary: rep.Summary,
 		Artifacts: rep.Artifacts, Issues: rep.Issues, NextSteps: rep.NextSteps,
@@ -382,5 +444,6 @@ func (a *App) emitWriteDone(jobID string, chapter int, rep *report.Report) {
 	raw, _ := json.Marshal(dto)
 	runtime.EventsEmit(a.ctx, eventWriteDone, map[string]any{
 		"job_id": jobID, "chapter": chapter, "report": string(raw),
+		"batch_complete": batchComplete, "batch_index": batchIndex, "total_in_batch": totalInBatch,
 	})
 }

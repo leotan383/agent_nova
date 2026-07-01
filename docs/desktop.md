@@ -105,7 +105,12 @@ desktop/
 |------|------|
 | `ListMemories` / `CreateMemory` / `UpdateMemory` / `ArchiveMemory` | 记忆管理 |
 | `ListForeshadows` / `ResolveForeshadow` / `UpdateForeshadow` | 伏笔管理 |
-| `FindMemoryConflicts` | 记忆冲突检测 |
+| `FindMemoryConflicts` / `MergeMemories` | 记忆冲突检测与合并 |
+| `LearnFromFeedback` | 从反馈学习（nova learn） |
+| `GetConsistencyReport` | 一致性仪表盘数据 |
+| `RunProjectDoctor` / `RunPreflight` | 项目体检 / 写前预检 |
+| `CreateProjectBackup` / `ListProjectBackups` / `RestoreProjectBackup` | 备份管理 |
+| `BootstrapMemories` | 设定集→记忆回填 |
 | `ExportProject` | 导出 Markdown / TXT / EPUB |
 | `ListWikiEntries` / `GetWikiContent` / `SaveWikiContent` | Wiki 设定浏览 |
 
@@ -118,7 +123,7 @@ desktop/
 | `write:delta` | `job_id`, `chapter`, `delta` | 起草正文流式片段 |
 | `write:step` | `job_id`, `chapter`, `step`, `message` | 流水线步骤 |
 | `write:status` | `job_id`, `chapter`, `status`, `message` | pending / running / done / failed / cancelled |
-| `write:done` | `job_id`, `chapter`, `report` (JSON) | 完成报告（含 token_usage） |
+| `write:done` | `job_id`, `chapter`, `report`, `batch_complete`, `batch_index`, `total_in_batch` | 完成报告（含 token_usage；批量写章时中间章 `batch_complete=false`） |
 | `write:error` | `job_id`, `chapter`, `error` | 错误 |
 
 切换 Tab 后可通过 `GetWriteJobState` / `GetActiveWriteJob` 恢复已输出的流式正文。
@@ -136,9 +141,10 @@ desktop/
 | 记忆 / 伏笔管理 | ✅ | ✅ |
 | 导出 EPUB | ✅ | ✅ |
 | 全文搜索 | ✅ | ✅ |
-| `nova learn` 反馈学记忆 | ✅ | — |
-| `nova backup` / `doctor` / `preflight` | ✅ | — |
-| 批量连续写章 | ✅ | — |
+| `nova learn` 反馈学记忆 | ✅ | ✅ MemoryPanel |
+| `nova backup` / `doctor` / `preflight` | ✅ | ✅ Overview 项目工具 |
+| `memory bootstrap` | ✅ | ✅ Overview 设定→记忆 |
+| 批量连续写章 | ✅ | ✅ WritePanel 连续写到第 N 章 |
 | 新手引导 | — | ✅ |
 | Token 用量统计 | — | ✅ |
 

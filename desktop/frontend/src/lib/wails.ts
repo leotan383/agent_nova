@@ -88,8 +88,10 @@ export const chapterWordOptions = [
 
 export interface StartWriteInput {
   chapter: number;
+  end_chapter?: number;
   volume: number;
   resume: boolean;
+  continue_on_error?: boolean;
 }
 
 export interface WriteJobInfo {
@@ -97,6 +99,8 @@ export interface WriteJobInfo {
   chapter: number;
   volume: number;
   status: string;
+  total_in_batch?: number;
+  batch_index?: number;
 }
 
 export interface WriteJobStateDTO {
@@ -221,6 +225,41 @@ export interface MemoryConflictDTO {
   subject: string;
   count: number;
   memories: MemoryDTO[];
+}
+
+export interface BootstrapResultDTO {
+  inserted_count: number;
+}
+
+export interface LearnResultDTO {
+  ok: boolean;
+  summary: string;
+  memory_id?: string;
+  category?: string;
+  subject?: string;
+}
+
+export interface DoctorFindingDTO {
+  level: string;
+  message: string;
+  fix?: string;
+}
+
+export interface DoctorReportDTO {
+  ok: boolean;
+  phase: string;
+  findings: DoctorFindingDTO[];
+}
+
+export interface PreflightDTO {
+  ok: boolean;
+  title: string;
+  phase: string;
+  issues: string[];
+}
+
+export interface BackupItemDTO {
+  name: string;
 }
 
 export interface MergeMemoriesInput {
@@ -530,6 +569,13 @@ interface AppBindings {
   UpdateForeshadow(id: string, description: string): Promise<void>;
   FindMemoryConflicts(): Promise<MemoryConflictDTO[]>;
   MergeMemories(input: MergeMemoriesInput): Promise<void>;
+  LearnFromFeedback(content: string): Promise<LearnResultDTO>;
+  RunProjectDoctor(deep: boolean): Promise<DoctorReportDTO>;
+  RunPreflight(): Promise<PreflightDTO>;
+  CreateProjectBackup(label: string): Promise<BackupItemDTO>;
+  ListProjectBackups(): Promise<BackupItemDTO[]>;
+  RestoreProjectBackup(name: string): Promise<void>;
+  BootstrapMemories(): Promise<BootstrapResultDTO>;
   GetConsistencyReport(): Promise<ConsistencyReportDTO>;
   HasAPIKey(): Promise<boolean>;
   AppInfo(): Promise<{ name: string; version: string }>;

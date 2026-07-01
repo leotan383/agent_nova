@@ -15,6 +15,7 @@ import { ConsistencyReportDTO, ProjectHealthDTO, ProjectTokenUsageDTO, StatusRep
 import { formatTokenUsage } from "../lib/tokenUsage";
 import OnboardingChecklist from "./OnboardingChecklist";
 import ProjectHealthPanel from "./ProjectHealthPanel";
+import ProjectToolsCard from "./ProjectToolsCard";
 
 type Props = {
   novelId: string;
@@ -31,6 +32,7 @@ type Props = {
   onGoToMemories: () => void;
   onGoToForeshadows: () => void;
   onGoToConsistency: () => void;
+  onProjectToolsRefresh?: () => void;
 };
 
 export default function OverviewPanel({
@@ -48,6 +50,7 @@ export default function OverviewPanel({
   onGoToMemories,
   onGoToForeshadows,
   onGoToConsistency,
+  onProjectToolsRefresh,
 }: Props) {
   const nextChapter = Math.max(1, status.current_chapter + 1);
   const pct = Math.min(100, Math.max(0, status.progress_percent ?? 0));
@@ -141,6 +144,7 @@ export default function OverviewPanel({
         </div>
         <div className="space-y-4 lg:col-span-2">
           <ConsistencySummaryCard refreshKey={healthRefreshKey} onGoToConsistency={onGoToConsistency} />
+          <ProjectToolsCard refreshKey={healthRefreshKey} onRefresh={onProjectToolsRefresh} />
           <TokenUsageCard refreshKey={healthRefreshKey} />
           <OverviewMetrics
             status={status}

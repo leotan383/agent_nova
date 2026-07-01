@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Archive, Check, Loader2, Pencil, Plus, X } from "lucide-react";
+import { AlertTriangle, Archive, Check, Lightbulb, Loader2, Pencil, Plus, X } from "lucide-react";
 import { CreateMemoryInput, ForeshadowDTO, MemoryConflictDTO, MemoryDTO, app } from "../lib/wails";
 
 export type MemoryFocus = "memories" | "foreshadows" | "resolved" | "conflicts";
@@ -45,6 +45,9 @@ export default function MemoryPanel({ focus, onFocusChange, highlightId = "" }: 
   const [mergingSubject, setMergingSubject] = useState("");
   const [mergeKeepID, setMergeKeepID] = useState("");
   const [mergeContent, setMergeContent] = useState("");
+  const [learnOpen, setLearnOpen] = useState(false);
+  const [learnText, setLearnText] = useState("");
+  const [learnResult, setLearnResult] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -196,6 +199,24 @@ export default function MemoryPanel({ focus, onFocusChange, highlightId = "" }: 
       setMergeKeepID("");
       setMergeContent("");
       await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitLearn = async () => {
+    if (!learnText.trim()) return;
+    setSaving(true);
+    setLearnResult("");
+    setError("");
+    try {
+      const res = await app().LearnFromFeedback(learnText.trim());
+      setLearnResult(res.summary || "已沉淀到长期记忆");
+      setLearnText("");
+      setLearnOpen(false);
+      if (focus === "memories") await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -446,15 +467,58 @@ export default function MemoryPanel({ focus, onFocusChange, highlightId = "" }: 
       {tabBar}
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-medium text-studio-muted">长期记忆 ({memories.length})</h2>
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="inline-flex items-center gap-1 rounded-lg border border-studio-border px-2 py-1 text-xs text-studio-muted hover:text-studio-text"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          新增
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setLearnOpen(true)}
+            className="inline-flex items-center gap-1 rounded-lg border border-studio-border px-2 py-1 text-xs text-studio-muted hover:text-studio-text"
+          >
+            <Lightbulb className="h-3.5 w-3.5" />
+            从反馈学习
+          </button>
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="inline-flex items-center gap-1 rounded-lg border border-studio-border px-2 py-1 text-xs text-studio-muted hover:text-studio-text"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            新增
+          </button>
+        </div>
       </div>
+
+      {learnOpen && (
+        <div className="mb-4 rounded-xl border border-studio-accent/30 bg-studio-panel p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-medium">从反馈学习（nova learn）</span>
+            <button type="button" onClick={() => setLearnOpen(false)}>
+              <X className="h-4 w-4 text-studio-muted" />
+            </button>
+          </div>
+          <textarea
+            value={learnText}
+            onChange={(e) => setLearnText(e.target.value)}
+            placeholder="例如：本章危机钩设计很有效，悬念拉满"
+            rows={3}
+            className="w-full resize-none rounded border border-studio-border bg-studio-bg px-2 py-1.5 text-sm outline-none"
+          />
+          <button
+            type="button"
+            onClick={submitLearn}
+            disabled={saving || !learnText.trim()}
+            className="mt-2 rounded-lg bg-studio-accent px-3 py-1.5 text-xs text-studio-on-accent disabled:opacity-40"
+          >
+            {saving ? "沉淀中…" : "沉淀为记忆"}
+          </button>
+        </div>
+      )}
+
+      {learnResult && (
+        <p className="mb-3 flex items-center gap-1 text-xs text-[rgb(var(--studio-diff-add-stat))]">
+          <Check className="h-3.5 w-3.5" />
+          {learnResult}
+        </p>
+      )}
 
       {error && <div className="mb-4 studio-alert-error-compact">{error}</div>}
 

@@ -58,6 +58,10 @@ export default function WritePanel({
   const [writingChapter, setWritingChapter] = useState<number | null>(null);
   const chapter = writingChapter ?? nextChapter;
   const [resume, setResume] = useState(false);
+  const [batchEndChapter, setBatchEndChapter] = useState(0);
+  const [continueOnError, setContinueOnError] = useState(false);
+  const [batchTotal, setBatchTotal] = useState(1);
+  const [batchIndex, setBatchIndex] = useState(1);
   const [jobId, setJobId] = useState("");
   const [jobStatus, setJobStatus] = useState("");
   const [step, setStep] = useState("");
@@ -143,6 +147,7 @@ export default function WritePanel({
       eventsOn(WRITE_EVENTS.status, (p) => {
         if (!match(p.job_id)) return;
         setJobStatus(p.status || "");
+        if (p.chapter) setWritingChapter(p.chapter);
         if (p.status === "running") {
           setRunning(true);
           setSidebarOpen(false);
@@ -165,6 +170,16 @@ export default function WritePanel({
             /* ignore */
           }
         }
+        const batchComplete = p.batch_complete !== false;
+        if (!batchComplete) {
+          setStreamText("");
+          setStep("");
+          setStepMessage("");
+          if (p.chapter) setWritingChapter(p.chapter + 1);
+          if (p.batch_index) setBatchIndex(p.batch_index + 1);
+          onComplete();
+          return;
+        }
         setRunning(false);
         setStep("done");
         onComplete();
@@ -186,16 +201,25 @@ export default function WritePanel({
     setJobStatus("");
     try {
       setWritingChapter(nextChapter);
-      const job = await app().StartWriteChapter({ chapter: nextChapter, volume, resume });
+      const endChapter = batchEndChapter > nextChapter ? batchEndChapter : 0;
+      const job = await app().StartWriteChapter({
+        chapter: nextChapter,
+        end_chapter: endChapter,
+        volume,
+        resume,
+        continue_on_error: continueOnError,
+      });
       jobIdRef.current = job.id;
       setJobId(job.id);
       setJobStatus(job.status);
+      setBatchTotal(job.total_in_batch ?? 1);
+      setBatchIndex(job.batch_index ?? 1);
       setRunning(true);
       setSidebarOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [nextChapter, volume, resume]);
+  }, [nextChapter, volume, resume, batchEndChapter, continueOnError]);
 
   const cancelWrite = async () => {
     if (!jobId) return;
@@ -244,6 +268,11 @@ export default function WritePanel({
             <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
               <span className="text-lg font-semibold text-studio-text">
                 第 {volume} 卷 · 第 {chapter} 章
+                {batchTotal > 1 && (
+                  <span className="ml-2 text-sm font-normal text-studio-muted">
+                    （{batchIndex}/{batchTotal}）
+                  </span>
+                )}
               </span>
               {!running && status && status.current_chapter > 0 && (
                 <span className="text-xs text-studio-muted">
@@ -300,15 +329,39 @@ export default function WritePanel({
                 <ChevronDown className="h-3 w-3" />
               </button>
               {optionsOpen && (
-                <label className="absolute right-0 top-full z-10 mt-1 flex items-center gap-2 whitespace-nowrap rounded-lg border border-studio-border bg-studio-panel px-3 py-2 text-xs shadow-card">
-                  <input
-                    type="checkbox"
-                    checked={resume}
-                    onChange={(e) => setResume(e.target.checked)}
-                    className="rounded border-studio-border"
-                  />
-                  断点续写
-                </label>
+                <div className="absolute right-0 top-full z-10 mt-1 w-56 space-y-2 rounded-lg border border-studio-border bg-studio-panel p-3 text-xs shadow-card">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={resume}
+                      onChange={(e) => setResume(e.target.checked)}
+                      className="rounded border-studio-border"
+                    />
+                    断点续写
+                  </label>
+                  <label className="block">
+                    <span className="text-studio-muted">连续写到第</span>
+                    <input
+                      type="number"
+                      min={nextChapter}
+                      value={batchEndChapter || ""}
+                      placeholder={`${nextChapter}（单章）`}
+                      onChange={(e) => setBatchEndChapter(Number(e.target.value) || 0)}
+                      className="mt-1 w-full rounded border border-studio-border bg-studio-bg px-2 py-1 outline-none"
+                    />
+                  </label>
+                  {batchEndChapter > nextChapter && (
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={continueOnError}
+                        onChange={(e) => setContinueOnError(e.target.checked)}
+                        className="rounded border-studio-border"
+                      />
+                      遇错继续
+                    </label>
+                  )}
+                </div>
               )}
             </div>
 

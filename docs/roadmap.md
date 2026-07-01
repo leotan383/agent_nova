@@ -422,21 +422,19 @@ gantt
 - ✅ Overview 一眼看到：开放伏笔数、超期伏笔数、待处理冲突数
 - ✅ 冲突处理闭环：发现 → 合并/归档 memory、标记伏笔回收
 
-#### Q1-C：Desktop ↔ CLI 能力对齐（P1）
+#### Q1-C：Desktop ↔ CLI 能力对齐（P1）— ✅ 已完成（2026-07-01）
 
 **优先补齐**（按作者使用频率）：
 
-| 功能 | CLI 命令 | Desktop 形态 |
-|------|----------|--------------|
-| 作者反馈学记忆 | `nova learn` | MemoryPanel「从反馈学习」对话框 |
-| 预检 / 诊断 | `preflight` / `doctor` | Settings 或 Overview「项目体检」按钮 |
-| 备份 | `nova backup` | Overview「立即备份」+ 最近备份列表 |
-| 批量写章 | `nova write 1-3` | WritePanel 支持「连续写 N 章」队列 |
-| Memory bootstrap | `memory bootstrap` | Init 完成后一键同步设定→记忆 |
+| 功能 | CLI 命令 | Desktop 形态 | 状态 |
+|------|----------|--------------|------|
+| 作者反馈学记忆 | `nova learn` | MemoryPanel「从反馈学习」 | ✅ |
+| 预检 / 诊断 | `preflight` / `doctor` | Overview「项目工具」体检 | ✅ |
+| 备份 | `nova backup` | Overview 立即备份 + 列表恢复 | ✅ |
+| 批量写章 | `nova write 1-3` | WritePanel 选项「连续写到第 N 章」 | ✅ |
+| Memory bootstrap | `memory bootstrap` | Overview「设定→记忆」 | ✅ |
 
-**工作量**：M（3–4 周，可并行于 A/B）
-
-**成功标准**：日常写作 **零强制回 CLI**
+**成功标准**：✅ 日常写作零强制回 CLI（上述高频操作均可在 Studio 完成）
 
 #### Q1-D：Write 流式体验增强（P1）
 
@@ -562,7 +560,7 @@ gantt
 | 阶段 | 主题 | 最关键的一件事 | 状态 |
 |------|------|----------------|------|
 | **Phase 0** | 信任与上手 | 修流式 bug + 新手 30 分钟出第一章 | ✅ 已完成 |
-| **Q1** | 长篇稳定性 | 记忆「聪明召回」+ 一致性可行动 | 待开始 |
+| **Q1** | 长篇稳定性 | 记忆「聪明召回」+ 一致性可行动 | Q1-A/B/C ✅；Q1-D 待做 |
 | **Q2** | 连载管理 | Replan + 日更节奏 + 全书编辑 | 待开始 |
 
 当前 Nova **最强的是写章流水线**；路线图的核心是：**把记忆和一致性从「设计文档」变成作者能感知、能操作的产品能力**，然后再扩到连载运营与全书后期。

@@ -508,6 +508,10 @@ export default function StudioPage() {
                 onGoToMemories={() => void goToMemories()}
                 onGoToForeshadows={() => void goToForeshadows()}
                 onGoToConsistency={() => void goToConsistency()}
+                onProjectToolsRefresh={() => {
+                  setHealthRefreshKey((k) => k + 1);
+                  loadStudio();
+                }}
               />
             </div>
           )}

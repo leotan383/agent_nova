@@ -11,6 +11,9 @@ export type WriteEventPayload = {
   content?: string;
   phase?: string;
   turns?: string;
+  batch_complete?: boolean;
+  batch_index?: number;
+  total_in_batch?: number;
 };
 
 type WailsRuntime = {
