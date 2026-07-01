@@ -27,6 +27,7 @@ const stepLabels: Record<string, string> = {
 
 type Props = {
   status: StatusReport | null;
+  embedded?: boolean;
   onComplete: () => void;
   onGoToPlanning: (volume?: number) => void;
   onReviewChapter: (chapter: number) => void;
@@ -36,14 +37,18 @@ type Props = {
 
 export default function WritePanel({
   status,
+  embedded = false,
   onComplete,
   onGoToPlanning,
   onReviewChapter,
   onReadChapter,
   onRebuildIndex,
 }: Props) {
-  const [chapter, setChapter] = useState(1);
-  const [volume, setVolume] = useState(1);
+  const nextChapter = Math.max(1, (status?.current_chapter ?? 0) + 1);
+  const volume = Math.max(1, status?.current_volume ?? 1);
+
+  const [writingChapter, setWritingChapter] = useState<number | null>(null);
+  const chapter = writingChapter ?? nextChapter;
   const [resume, setResume] = useState(false);
   const [jobId, setJobId] = useState("");
   const [jobStatus, setJobStatus] = useState("");
@@ -61,13 +66,6 @@ export default function WritePanel({
   const jobIdRef = useRef("");
 
   useEffect(() => {
-    if (status) {
-      setChapter(Math.max(1, status.current_chapter + 1));
-      setVolume(Math.max(1, status.current_volume || 1));
-    }
-  }, [status]);
-
-  useEffect(() => {
     app()
       .HasAPIKey()
       .then(setHasKey)
@@ -81,8 +79,7 @@ export default function WritePanel({
         if (!active || !job.id) return;
         jobIdRef.current = job.id;
         setJobId(job.id);
-        setChapter(job.chapter);
-        setVolume(job.volume);
+        setWritingChapter(job.chapter);
         setJobStatus(job.status);
         const isRunning = job.status === "pending" || job.status === "running";
         setRunning(isRunning);
@@ -150,7 +147,8 @@ export default function WritePanel({
     setStepMessage("");
     setJobStatus("");
     try {
-      const job = await app().StartWriteChapter({ chapter, volume, resume });
+      setWritingChapter(nextChapter);
+      const job = await app().StartWriteChapter({ chapter: nextChapter, volume, resume });
       jobIdRef.current = job.id;
       setJobId(job.id);
       setJobStatus(job.status);
@@ -159,7 +157,7 @@ export default function WritePanel({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [chapter, volume, resume]);
+  }, [nextChapter, volume, resume]);
 
   const cancelWrite = async () => {
     if (!jobId) return;
@@ -197,8 +195,11 @@ export default function WritePanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      {/* Hero toolbar */}
-      <header className="shrink-0 border-b border-studio-border bg-studio-panel/80 px-5 py-4 backdrop-blur-sm">
+      <header
+        className={`shrink-0 border-b border-studio-border px-5 py-4 ${
+          embedded ? "bg-studio-panel" : "bg-studio-panel/80 backdrop-blur-sm"
+        }`}
+      >
         <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-0">
             <p className="text-[10px] font-medium uppercase tracking-wide text-studio-muted">写作任务</p>
@@ -206,27 +207,10 @@ export default function WritePanel({
               <span className="text-lg font-semibold text-studio-text">
                 第 {volume} 卷 · 第 {chapter} 章
               </span>
-              {!running && (
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    min={1}
-                    value={chapter}
-                    onChange={(e) => setChapter(Math.max(1, Number(e.target.value) || 1))}
-                    className="w-14 rounded-md border border-studio-border bg-studio-bg px-2 py-0.5 text-xs outline-none focus:border-studio-accent"
-                    title="章号"
-                  />
-                  <span className="text-xs text-studio-muted">章</span>
-                  <input
-                    type="number"
-                    min={1}
-                    value={volume}
-                    onChange={(e) => setVolume(Math.max(1, Number(e.target.value) || 1))}
-                    className="w-14 rounded-md border border-studio-border bg-studio-bg px-2 py-0.5 text-xs outline-none focus:border-studio-accent"
-                    title="卷号"
-                  />
-                  <span className="text-xs text-studio-muted">卷</span>
-                </div>
+              {!running && status && status.current_chapter > 0 && (
+                <span className="text-xs text-studio-muted">
+                  接在第 {status.current_chapter} 章之后
+                </span>
               )}
             </div>
           </div>
@@ -315,7 +299,7 @@ export default function WritePanel({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 gap-4 overflow-hidden p-4">
+      <div className={`flex min-h-0 flex-1 gap-4 overflow-hidden ${embedded ? "p-3" : "p-4"}`}>
         {sidebarOpen && (
           <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto lg:w-80">
             <WriteGatePanel
@@ -394,7 +378,8 @@ export default function WritePanel({
                 setReport(null);
                 setStreamText("");
                 setStep("");
-                setChapter((c) => c + 1);
+                setWritingChapter(null);
+                onComplete();
               }}
             />
           )}

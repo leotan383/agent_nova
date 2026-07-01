@@ -8,20 +8,14 @@ import {
   ChevronDown,
   Download,
   FileText,
-  History,
   LayoutDashboard,
   Map,
-  PenLine,
   Search,
   Settings,
 } from "lucide-react";
 import { ChapterDTO, NovelCard, SearchHitDTO, StatusReport, app, phaseLabel } from "../lib/wails";
-import ChapterDocumentPanel from "../components/ChapterDocumentPanel";
-import ChapterStatusBadge from "../components/ChapterStatusBadge";
+import ChaptersPanel, { ChapterDocTab, ChaptersView } from "../components/ChaptersPanel";
 import MemoryPanel, { MemoryFocus } from "../components/MemoryPanel";
-import WritePanel from "../components/WritePanel";
-import ChapterCoachPanel from "../components/ChapterCoachPanel";
-import ChapterVersionPanel from "../components/ChapterVersionPanel";
 import OverviewPanel from "../components/OverviewPanel";
 import VolumePlanPanel from "../components/VolumePlanPanel";
 import ExportDialog from "../components/ExportDialog";
@@ -32,11 +26,11 @@ import WikiPanel from "../components/WikiPanel";
 import UnsavedChangesDialog from "../components/UnsavedChangesDialog";
 import { confirmUnsavedLeave, hasUnsavedChanges } from "../lib/unsavedGuard";
 
-type Tab = "overview" | "planning" | "write" | "chapters" | "memory" | "wiki";
-type ChapterDocTab = "body" | "review" | "summary";
+type Tab = "overview" | "planning" | "chapters" | "memory" | "wiki";
 
 type NavSnapshot = {
   tab: Tab;
+  chaptersView: ChaptersView;
   selectedChapter: number | null;
   chapterDocTab: ChapterDocTab;
   memoryFocus: MemoryFocus;
@@ -51,6 +45,7 @@ export default function StudioPage() {
   const [chapters, setChapters] = useState<ChapterDTO[]>([]);
   const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
   const [chapterDocTab, setChapterDocTab] = useState<ChapterDocTab>("body");
+  const [chaptersView, setChaptersView] = useState<ChaptersView>("read");
   const [tab, setTab] = useState<Tab>("overview");
   const [memoryFocus, setMemoryFocus] = useState<MemoryFocus>("memories");
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -106,6 +101,7 @@ export default function StudioPage() {
       await app().SwitchNovel(id);
       setSwitcherOpen(false);
       setSelectedChapter(null);
+      setChaptersView("read");
       await loadStudio();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -114,17 +110,29 @@ export default function StudioPage() {
   };
 
   const loadChapter = (num: number, docKind: ChapterDocTab = "body") => {
+    setChaptersView("read");
     setSelectedChapter(num);
     setChapterDocTab(docKind);
     setTab("chapters");
   };
 
   const guardedLoadChapter = async (num: number, docKind: ChapterDocTab = "body") => {
-    if (tab === "chapters" && selectedChapter === num && chapterDocTab === docKind) return;
+    if (tab === "chapters" && chaptersView === "read" && selectedChapter === num && chapterDocTab === docKind) {
+      return;
+    }
     const ok = await confirmUnsavedLeave();
     if (!ok) return;
     setAutoReviewChapter((prev) => (prev === num && docKind === "review" ? prev : null));
     loadChapter(num, docKind);
+  };
+
+  const openWriteMode = async () => {
+    if (tab === "chapters" && chaptersView === "write") return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
+    clearSearchReturn();
+    setChaptersView("write");
+    setTab("chapters");
   };
 
   const refreshChapterView = () => {
@@ -146,7 +154,7 @@ export default function StudioPage() {
       if (latest) {
         await guardedLoadChapter(latest);
       } else {
-        await goToChapters();
+        await openWriteMode();
       }
       return;
     }
@@ -169,24 +177,12 @@ export default function StudioPage() {
     setTab("memory");
   };
 
-  const goToWrite = async () => {
-    if (tab === "write") return;
-    const ok = await confirmUnsavedLeave();
-    if (!ok) return;
-    clearSearchReturn();
-    setTab("write");
-  };
-
   const goToPlanning = async (volume?: number) => {
     const ok = await confirmUnsavedLeave();
     if (!ok) return;
     if (volume && volume > 0) setPlanFocusVolume(volume);
     clearSearchReturn();
     setTab("planning");
-  };
-
-  const continueWriting = async () => {
-    await goToWrite();
   };
 
   const handleRebuildIndex = async () => {
@@ -238,6 +234,7 @@ export default function StudioPage() {
     const ok = await confirmUnsavedLeave();
     if (!ok) return;
     setTab(navBeforeSearch.tab);
+    setChaptersView(navBeforeSearch.chaptersView);
     setSelectedChapter(navBeforeSearch.selectedChapter);
     setChapterDocTab(navBeforeSearch.chapterDocTab);
     setMemoryFocus(navBeforeSearch.memoryFocus);
@@ -251,6 +248,7 @@ export default function StudioPage() {
 
     setNavBeforeSearch({
       tab,
+      chaptersView,
       selectedChapter,
       chapterDocTab,
       memoryFocus,
@@ -295,7 +293,6 @@ export default function StudioPage() {
   const workflowNav = [
     { id: "overview" as Tab, label: "概览", icon: LayoutDashboard },
     { id: "planning" as Tab, label: "规划", icon: Map },
-    { id: "write" as Tab, label: "写作", icon: PenLine },
     { id: "chapters" as Tab, label: "章节", icon: FileText },
   ];
   const referenceNav = [
@@ -439,7 +436,7 @@ export default function StudioPage() {
             ))}
           </nav>
           <p className="mt-8 px-3 text-xs leading-relaxed text-studio-muted">
-            写作流程在上方；记忆与设定在下方，供查阅与维护世界观。
+            章节页可 AI 写章、阅读改稿；记忆与设定供查阅世界观。
           </p>
         </aside>
 
@@ -473,9 +470,9 @@ export default function StudioPage() {
               <OverviewPanel
                 status={status}
                 healthRefreshKey={healthRefreshKey}
-                onContinueWrite={() => void continueWriting()}
+                onContinueWrite={() => void openWriteMode()}
                 onOpenPlanning={(vol) => void goToPlanning(vol)}
-                onOpenWrite={() => void goToWrite()}
+                onOpenWrite={() => void openWriteMode()}
                 onRebuildIndex={handleRebuildIndex}
                 onReviewChapter={(num) => void requestReviewChapter(num)}
                 onGoToChapters={() => void goToChapters()}
@@ -496,95 +493,28 @@ export default function StudioPage() {
             </div>
           )}
 
-          {tab === "write" && (
+          {tab === "chapters" && (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <WritePanel
+              <ChaptersPanel
                 status={status}
-                onComplete={loadStudio}
+                chapters={chapters}
+                view={chaptersView}
+                selectedChapter={selectedChapter}
+                chapterDocTab={chapterDocTab}
+                chapterRefreshKey={chapterRefreshKey}
+                autoReviewChapter={autoReviewChapter}
+                versionPanelOpen={versionPanelOpen}
+                onVersionPanelOpenChange={setVersionPanelOpen}
+                onSelectChapter={(num) => void guardedLoadChapter(num)}
+                onStartWrite={() => void openWriteMode()}
+                onWriteComplete={loadStudio}
                 onGoToPlanning={(vol) => void goToPlanning(vol)}
                 onReviewChapter={(num) => void requestReviewChapter(num)}
                 onReadChapter={(num) => void guardedLoadChapter(num)}
+                onChapterSaved={refreshChapterView}
+                onReviewComplete={handleReviewComplete}
                 onRebuildIndex={handleRebuildIndex}
               />
-            </div>
-          )}
-
-          {tab === "chapters" && (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex min-h-0 flex-1 gap-4 overflow-hidden">
-              <div className="flex w-52 shrink-0 flex-col overflow-hidden rounded-xl border border-studio-border bg-studio-panel">
-                <ul className="min-h-0 flex-1 overflow-y-auto">
-                  {chapters.length === 0 ? (
-                    <li className="p-4 text-sm text-studio-muted">暂无章节</li>
-                  ) : (
-                    chapters.map((c) => (
-                      <li key={c.number}>
-                        <button
-                          type="button"
-                          onClick={() => void guardedLoadChapter(c.number)}
-                          className={`w-full border-b border-studio-border px-4 py-3 text-left text-sm transition hover:bg-studio-bg ${
-                            selectedChapter === c.number ? "bg-studio-bg text-studio-accent" : ""
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">第{c.number}章</span>
-                            <ChapterStatusBadge status={c.status} compact />
-                          </div>
-                          <div className="truncate text-xs text-studio-muted">
-                            {c.title || "无标题"} · {c.word_count}字
-                          </div>
-                        </button>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-studio-border bg-studio-paper text-studio-ink">
-                {selectedChapter && (
-                  <div className="flex shrink-0 items-center justify-between border-b border-studio-border px-4 py-2">
-                    <span className="text-sm font-medium">第{selectedChapter}章</span>
-                    <button
-                      type="button"
-                      onClick={() => setVersionPanelOpen(true)}
-                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-studio-muted hover:bg-studio-bg hover:text-studio-text"
-                    >
-                      <History className="h-3.5 w-3.5" />
-                      版本历史
-                    </button>
-                  </div>
-                )}
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                  {selectedChapter ? (
-                    <ChapterDocumentPanel
-                      key={`${selectedChapter}-${chapterRefreshKey}`}
-                      chapter={selectedChapter}
-                      initialTab={chapterDocTab}
-                      autoStartReview={autoReviewChapter === selectedChapter}
-                      onSaved={refreshChapterView}
-                      onReviewComplete={handleReviewComplete}
-                    />
-                  ) : (
-                    <p className="flex h-full items-center justify-center text-studio-muted/70">
-                      选择左侧章节阅读正文
-                    </p>
-                  )}
-                </div>
-              </div>
-              {selectedChapter && (
-                <ChapterCoachPanel
-                  chapter={selectedChapter}
-                  onApplied={refreshChapterView}
-                />
-              )}
-              {selectedChapter && (
-                <ChapterVersionPanel
-                  chapter={selectedChapter}
-                  open={versionPanelOpen}
-                  onClose={() => setVersionPanelOpen(false)}
-                  onRestored={refreshChapterView}
-                />
-              )}
-            </div>
             </div>
           )}
 
