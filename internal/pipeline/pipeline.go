@@ -179,6 +179,42 @@ func UpdateProjectProgress(p *project.Project, chapter int) error {
 	return p.Save()
 }
 
+// HasReviewReport 该章磁盘上是否已有非空审查报告。
+func HasReviewReport(p *project.Project, chapter int) bool {
+	data, err := os.ReadFile(p.ReviewPath(chapter))
+	return err == nil && strings.TrimSpace(string(data)) != ""
+}
+
+// InferChapterStatus 根据审查报告等推断章节状态（draft / reviewed / published）。
+func InferChapterStatus(p *project.Project, st *store.Store, chapter int) string {
+	if ch, err := st.GetChapter(chapter); err == nil && strings.EqualFold(ch.Status, "published") {
+		return "published"
+	}
+	if HasReviewReport(p, chapter) {
+		return "reviewed"
+	}
+	return "draft"
+}
+
+// RefreshChapterStatuses 将 DB 中章节状态与磁盘审查报告对齐。
+func RefreshChapterStatuses(p *project.Project, st *store.Store) error {
+	chs, err := st.ListChapters()
+	if err != nil {
+		return err
+	}
+	for _, ch := range chs {
+		inferred := InferChapterStatus(p, st, ch.Number)
+		if inferred == ch.Status {
+			continue
+		}
+		ch.Status = inferred
+		if err := st.UpsertChapter(ch); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func PostWriteIndex(p *project.Project, st *store.Store, chapter int, path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -187,9 +223,10 @@ func PostWriteIndex(p *project.Project, st *store.Store, chapter int, path strin
 	title := extractChapterTitle(filepath.Base(path))
 	wordCount := utf8.RuneCountInString(string(data))
 	summaryPath := p.SummaryPath(chapter)
+	status := InferChapterStatus(p, st, chapter)
 	_ = st.UpsertChapter(store.Chapter{
 		Number: chapter, Title: title, WordCount: wordCount, Path: path,
-		SummaryPath: summaryPath, Status: "draft", UpdatedAt: project.Timestamp(),
+		SummaryPath: summaryPath, Status: status, UpdatedAt: project.Timestamp(),
 	})
 	idx := index.New(p, st)
 	return idx.RebuildChapters(chapter)

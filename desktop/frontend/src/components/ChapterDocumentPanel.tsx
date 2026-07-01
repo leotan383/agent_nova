@@ -303,23 +303,32 @@ export default function ChapterDocumentPanel({
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {tab === "review" && reviewMetrics && (
-          <ReviewSummaryPanel metrics={reviewMetrics} compact />
+          <ReviewSummaryPanel metrics={reviewMetrics} collapsible defaultExpanded={false} />
         )}
-        <MarkdownEditor
-          key={`${chapter}-${tab}`}
-          value={editorValue}
-          paper
-          saving={saving}
-          onSave={save}
-          selectionChapter={tab === "body" ? chapter : undefined}
-          emptyHint={
-            tab === "body"
-              ? "正文为空"
-              : tab === "review"
-                ? "暂无审查报告"
-                : "暂无摘要"
-          }
-        />
+        {tab === "review" && (
+          <div className="flex shrink-0 items-center justify-between border-b border-studio-border/60 bg-studio-panel/40 px-4 py-1.5">
+            <p className="text-[11px] font-medium text-studio-muted">完整审查报告</p>
+            <p className="text-[10px] text-studio-muted/70">可在下方预览或编辑 Markdown</p>
+          </div>
+        )}
+        <div className={`flex min-h-0 flex-1 flex-col overflow-hidden ${tab === "review" ? "min-h-[280px]" : ""}`}>
+          <MarkdownEditor
+            key={`${chapter}-${tab}`}
+            value={editorValue}
+            paper
+            saving={saving}
+            onSave={save}
+            selectionChapter={tab === "body" ? chapter : undefined}
+            relaxed={tab === "review"}
+            emptyHint={
+              tab === "body"
+                ? "正文为空"
+                : tab === "review"
+                  ? "暂无审查报告"
+                  : "暂无摘要"
+            }
+          />
+        </div>
       </div>
     </div>
   );

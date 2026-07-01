@@ -60,8 +60,11 @@ func (idx *Indexer) RebuildChapters(chapterNum int) error {
 		}
 		wordCount := utf8.RuneCountInString(string(data))
 		status := "draft"
-		if existing, err := idx.store.GetChapter(num); err == nil && existing.Status != "" {
-			status = existing.Status
+		if reviewData, err := os.ReadFile(idx.proj.ReviewPath(num)); err == nil && strings.TrimSpace(string(reviewData)) != "" {
+			status = "reviewed"
+		}
+		if existing, err := idx.store.GetChapter(num); err == nil && strings.EqualFold(existing.Status, "published") {
+			status = "published"
 		}
 		summaryPath := idx.proj.SummaryPath(num)
 		if err := idx.store.IndexChapterFTS(num, title, string(data)); err != nil {

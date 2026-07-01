@@ -6,9 +6,10 @@ type Props = {
   content: string;
   className?: string;
   paper?: boolean;
+  relaxed?: boolean;
 };
 
-export default function ContentPreview({ content, className = "", paper = false }: Props) {
+export default function ContentPreview({ content, className = "", paper = false, relaxed = false }: Props) {
   const trimmed = content.trim();
   if (!trimmed) return null;
 
@@ -18,5 +19,5 @@ export default function ContentPreview({ content, className = "", paper = false 
     return <StructuredContentPreview content={trimmed} className={className} />;
   }
 
-  return <MarkdownPreview content={trimmed} paper={paper} className={className} />;
+  return <MarkdownPreview content={trimmed} paper={paper} relaxed={relaxed} className={className} />;
 }

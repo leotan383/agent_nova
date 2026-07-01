@@ -352,10 +352,13 @@ func (a *App) syncChaptersFromDisk(actx *app.Context) error {
 		}
 	}
 	if !needsSync {
-		return nil
+		return pipeline.RefreshChapterStatuses(actx.Project, actx.Store)
 	}
 	idx := index.New(actx.Project, actx.Store)
-	return idx.RebuildChapters(0)
+	if err := idx.RebuildChapters(0); err != nil {
+		return err
+	}
+	return pipeline.RefreshChapterStatuses(actx.Project, actx.Store)
 }
 
 // MemoryDTO 长期记忆条目。

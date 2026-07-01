@@ -150,6 +150,7 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 		// 保存完整审查报告到审查目录
 		_ = os.MkdirAll(p.ReviewsDir(), 0o755)
 		_ = os.WriteFile(p.ReviewPath(opts.Chapter), []byte(reviewed), 0o644)
+		persistReviewRecord(st, opts.Chapter, p.ReviewPath(opts.Chapter), reviewed)
 
 		// 提取润色版全文写回正文
 		ledger.Record("review", "done", "ok")
@@ -319,12 +320,7 @@ func (w *ReviewWorkflow) ReviewChapter(ctx context.Context, p *project.Project, 
 	}
 	reviewPath := p.ReviewPath(chapter)
 	_ = os.WriteFile(reviewPath, []byte(content), 0o644)
-	hookScore, coolPoint, debt := parseReviewMetrics(content)
-	reportJSON, _ := json.Marshal(map[string]any{"hook_score": hookScore, "cool_point": coolPoint, "debt": debt})
-	_ = st.UpsertReview(store.ReviewRecord{
-		ChapterNumber: chapter, HookScore: hookScore, CoolPoint: coolPoint, Debt: debt,
-		ReportJSON: string(reportJSON), Path: reviewPath,
-	})
+	hookScore := persistReviewRecord(st, chapter, reviewPath, content)
 	_ = st.UpsertChapter(store.Chapter{Number: chapter, Status: "reviewed", UpdatedAt: project.Timestamp()})
 	summaryPath := p.SummaryPath(chapter)
 	summary, _ := os.ReadFile(summaryPath)
@@ -351,6 +347,18 @@ func parseReviewMetrics(content string) (float64, string, string) {
 		return 0, "", ""
 	}
 	return m.HookScore, m.CoolPoint, m.Debt
+}
+
+func persistReviewRecord(st *store.Store, chapter int, reviewPath, content string) float64 {
+	hookScore, coolPoint, debt := parseReviewMetrics(content)
+	reportJSON, _ := json.Marshal(map[string]any{
+		"hook_score": hookScore, "cool_point": coolPoint, "debt": debt,
+	})
+	_ = st.UpsertReview(store.ReviewRecord{
+		ChapterNumber: chapter, HookScore: hookScore, CoolPoint: coolPoint, Debt: debt,
+		ReportJSON: string(reportJSON), Path: reviewPath,
+	})
+	return hookScore
 }
 
 type LearnWorkflow struct {

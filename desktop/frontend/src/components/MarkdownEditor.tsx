@@ -20,6 +20,8 @@ type Props = {
   autoSave?: boolean;
   /** 自动保存 debounce 毫秒，默认 2000 */
   autoSaveMs?: number;
+  /** 审查报告等长文：略大字号、更宽行距 */
+  relaxed?: boolean;
 };
 
 const DEFAULT_AUTO_SAVE_MS = 2000;
@@ -35,6 +37,7 @@ export default function MarkdownEditor({
   selectionChapter,
   autoSave = true,
   autoSaveMs = DEFAULT_AUTO_SAVE_MS,
+  relaxed = false,
 }: Props) {
   const [mode, setMode] = useState<ViewMode>("preview");
   const [draft, setDraft] = useState(value);
@@ -292,7 +295,9 @@ export default function MarkdownEditor({
           spellCheck={false}
           className={
             paper
-              ? "min-h-0 flex-1 resize-none border-0 bg-studio-paper p-6 font-serif text-base leading-[1.85] text-studio-ink outline-none"
+              ? relaxed
+                ? "min-h-0 flex-1 resize-none border-0 bg-studio-paper px-8 py-6 font-serif text-[17px] leading-[1.9] text-studio-ink outline-none sm:px-10"
+                : "min-h-0 flex-1 resize-none border-0 bg-studio-paper p-6 font-serif text-base leading-[1.85] text-studio-ink outline-none"
               : "min-h-0 flex-1 resize-none border-0 bg-studio-bg p-4 font-mono text-sm leading-relaxed text-studio-text outline-none"
           }
           placeholder="在此编辑 Markdown…"
@@ -301,10 +306,16 @@ export default function MarkdownEditor({
         <div
           ref={previewRef}
           onMouseUp={selectionEnabled ? readPreviewSelection : undefined}
-          className={`min-h-0 flex-1 overflow-y-auto p-6 ${paper ? "bg-studio-paper text-studio-ink" : ""}`}
+          className={`min-h-0 flex-1 overflow-y-auto ${
+            paper
+              ? relaxed
+                ? "bg-studio-paper px-8 py-6 text-studio-ink sm:px-10"
+                : "bg-studio-paper p-6 text-studio-ink"
+              : "p-6"
+          }`}
         >
           {draft.trim() ? (
-            <ContentPreview content={draft} paper={paper} />
+            <ContentPreview content={draft} paper={paper} relaxed={relaxed} />
           ) : (
             <p className="text-sm text-studio-muted/70">{emptyHint}</p>
           )}

@@ -115,6 +115,16 @@ func Save(p *project.Project, st *store.Store, chapter int, kind, body string) (
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 			return "", err
 		}
+		ch, err := st.GetChapter(chapter)
+		if err != nil || ch == nil {
+			ch = &store.Chapter{Number: chapter}
+		}
+		ch.Status = pipeline.InferChapterStatus(p, st, chapter)
+		if ch.Status == "draft" {
+			ch.Status = "reviewed"
+		}
+		ch.UpdatedAt = project.Timestamp()
+		_ = st.UpsertChapter(*ch)
 		return path, nil
 	case KindSummary:
 		path := p.SummaryPath(chapter)
