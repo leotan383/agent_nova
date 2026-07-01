@@ -14,7 +14,7 @@ import {
   PenLine,
   Search,
   Settings,
-  Users,
+  Boxes,
 } from "lucide-react";
 import { ChapterDTO, NovelCard, SearchHitDTO, StatusReport, app, phaseLabel } from "../lib/wails";
 import ChapterDocumentPanel from "../components/ChapterDocumentPanel";
@@ -299,7 +299,7 @@ export default function StudioPage() {
     { id: "write" as Tab, label: "写作", icon: PenLine },
     { id: "chapters" as Tab, label: "章节", icon: FileText },
     { id: "memory" as Tab, label: "记忆", icon: Brain },
-    { id: "entities" as Tab, label: "状态", icon: Users },
+    { id: "entities" as Tab, label: "实体", icon: Boxes },
     { id: "wiki" as Tab, label: "百科", icon: BookOpen },
   ];
 
