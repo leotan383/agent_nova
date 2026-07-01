@@ -61,16 +61,19 @@ func AddWriteRun(projectRoot string, prompt, completion int) (ProjectStats, erro
 	return s, nil
 }
 
-// EstimateCostUSD 按常见 OpenAI 定价粗估美元成本（仅供参考）。
+// EstimateCostUSD 按常见 OpenAI 定价粗估美元成本（$/1M tokens，仅供参考）。
 func EstimateCostUSD(model string, prompt, completion int) float64 {
-	inRate, outRate := 0.0025, 0.01 // 默认 gpt-4o 档：$2.5 / $10 per 1M
+	// 单位：美元 / 100 万 tokens
+	inRate, outRate := 2.5, 10.0 // gpt-4o 档
 	switch {
 	case strings.Contains(model, "mini"):
-		inRate, outRate = 0.00015, 0.0006
+		inRate, outRate = 0.15, 0.60
 	case strings.Contains(model, "4o"):
-		inRate, outRate = 0.0025, 0.01
+		inRate, outRate = 2.5, 10.0
 	case strings.Contains(model, "3.5"):
-		inRate, outRate = 0.0005, 0.0015
+		inRate, outRate = 0.5, 1.5
+	case strings.Contains(strings.ToLower(model), "deepseek"):
+		inRate, outRate = 0.14, 0.28
 	}
 	return float64(prompt)/1_000_000*inRate + float64(completion)/1_000_000*outRate
 }
