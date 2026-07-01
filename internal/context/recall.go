@@ -293,6 +293,70 @@ func formatMemoryRecalls(hits []MemoryRecallHit) string {
 	return strings.Join(parts, "\n")
 }
 
+func applyMemoryPrefs(hits []MemoryRecallHit, st *store.Store, prefs MemoryPrefs) []MemoryRecallHit {
+	if st == nil {
+		return hits
+	}
+	excluded := map[string]struct{}{}
+	for _, id := range prefs.ExcludedIDs {
+		if id != "" {
+			excluded[id] = struct{}{}
+		}
+	}
+	var filtered []MemoryRecallHit
+	for _, h := range hits {
+		if _, skip := excluded[h.ID]; skip {
+			continue
+		}
+		filtered = append(filtered, h)
+	}
+
+	seen := map[string]struct{}{}
+	var out []MemoryRecallHit
+	addHit := func(h MemoryRecallHit) {
+		if _, ok := seen[h.ID]; ok {
+			return
+		}
+		seen[h.ID] = struct{}{}
+		out = append(out, h)
+	}
+
+	for _, id := range prefs.PinnedIDs {
+		if id == "" {
+			continue
+		}
+		if _, skip := excluded[id]; skip {
+			continue
+		}
+		found := false
+		for _, h := range filtered {
+			if h.ID == id {
+				h.Source = "pinned"
+				if h.Reason != "" {
+					h.Reason = "作者固定 · " + h.Reason
+				} else {
+					h.Reason = "作者固定"
+				}
+				addHit(h)
+				found = true
+				break
+			}
+		}
+		if !found {
+			if m, err := st.GetMemory(id); err == nil {
+				addHit(MemoryRecallHit{
+					ID: m.ID, Category: m.Category, Subject: m.Subject, Content: m.Content,
+					Source: "pinned", Reason: "作者固定", Score: 100,
+				})
+			}
+		}
+	}
+	for _, h := range filtered {
+		addHit(h)
+	}
+	return applyMemoryBudget(out, recallMaxRunes)
+}
+
 func buildFTSQuery(keywords []string, chapter int) string {
 	parts := []string{fmt.Sprintf("第%d", chapter)}
 	seen := map[string]struct{}{}

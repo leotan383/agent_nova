@@ -16,9 +16,16 @@ import (
 )
 
 type Builder struct {
-	Proj   *project.Project
-	Store  *store.Store
-	Config *config.Config // 可选；有 API Key 时启用语义召回
+	Proj        *project.Project
+	Store       *store.Store
+	Config      *config.Config // 可选；有 API Key 时启用语义召回
+	MemoryPrefs MemoryPrefs
+}
+
+// MemoryPrefs 写前记忆注入偏好（pin 固定 / exclude 排除）。
+type MemoryPrefs struct {
+	PinnedIDs   []string
+	ExcludedIDs []string
 }
 
 type Snapshot struct {
@@ -80,6 +87,7 @@ func (b *Builder) Build(chapter, volume int) (*Snapshot, error) {
 		if len(recalls) == 0 {
 			recalls = fallbackRecentMemories(b.Store)
 		}
+		recalls = applyMemoryPrefs(recalls, b.Store, b.MemoryPrefs)
 		snap.MemoryRecalls = recalls
 		snap.Memories = formatMemoryRecalls(recalls)
 

@@ -91,7 +91,10 @@ export interface StartWriteInput {
   end_chapter?: number;
   volume: number;
   resume: boolean;
+  skip_review?: boolean;
   continue_on_error?: boolean;
+  pinned_memory_ids?: string[];
+  excluded_memory_ids?: string[];
 }
 
 export interface WriteJobInfo {
@@ -501,6 +504,21 @@ export interface MemoryRecallDTO {
   score: number;
 }
 
+export interface WriteContextInput {
+  chapter: number;
+  volume: number;
+  pinned_memory_ids?: string[];
+  excluded_memory_ids?: string[];
+}
+
+export interface WriteResumeInfoDTO {
+  available: boolean;
+  chapter: number;
+  resume_step: string;
+  step_label: string;
+  last_message: string;
+}
+
 export interface WriteContextDTO {
   chapter: number;
   volume: number;
@@ -548,7 +566,8 @@ interface AppBindings {
   GetChapterDocument(chapter: number, kind: string): Promise<ChapterDocDTO>;
   SaveChapterDocument(chapter: number, kind: string, body: string): Promise<void>;
   SearchProject(query: string, limit: number): Promise<SearchHitDTO[]>;
-  GetWriteContext(chapter: number, volume: number): Promise<WriteContextDTO>;
+  GetWriteContext(input: WriteContextInput): Promise<WriteContextDTO>;
+  GetWriteResumeInfo(): Promise<WriteResumeInfoDTO>;
   GetWriteGate(chapter: number, volume: number): Promise<WriteGateDTO>;
   ListEntities(entityType: string): Promise<EntityDTO[]>;
   GetAppConfig(): Promise<AppConfigDTO>;

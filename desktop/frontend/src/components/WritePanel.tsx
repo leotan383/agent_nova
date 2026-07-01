@@ -4,11 +4,12 @@ import {
   Loader2,
   PanelLeftClose,
   PanelLeftOpen,
+  Play,
   Square,
   Wand2,
 } from "lucide-react";
 import { WRITE_EVENTS, eventsOn } from "../lib/runtime";
-import { StatusReport, WriteReportDTO, WriteJobStateDTO, app } from "../lib/wails";
+import { StatusReport, WriteReportDTO, WriteResumeInfoDTO, WriteJobStateDTO, app } from "../lib/wails";
 import WriteCompletionBar from "./WriteCompletionBar";
 import WriteContextPanel from "./WriteContextPanel";
 import WriteGatePanel from "./WriteGatePanel";
@@ -58,6 +59,11 @@ export default function WritePanel({
   const [writingChapter, setWritingChapter] = useState<number | null>(null);
   const chapter = writingChapter ?? nextChapter;
   const [resume, setResume] = useState(false);
+  const [skipReview, setSkipReview] = useState(false);
+  const [resumeInfo, setResumeInfo] = useState<WriteResumeInfoDTO | null>(null);
+  const [pinnedMemoryIds, setPinnedMemoryIds] = useState<string[]>([]);
+  const [excludedMemoryIds, setExcludedMemoryIds] = useState<string[]>([]);
+  const [stepDurations, setStepDurations] = useState<Record<string, number>>({});
   const [batchEndChapter, setBatchEndChapter] = useState(0);
   const [continueOnError, setContinueOnError] = useState(false);
   const [batchTotal, setBatchTotal] = useState(1);
@@ -76,6 +82,14 @@ export default function WritePanel({
   const [optionsOpen, setOptionsOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const jobIdRef = useRef("");
+  const prevStepRef = useRef("");
+
+  useEffect(() => {
+    app()
+      .GetWriteResumeInfo()
+      .then(setResumeInfo)
+      .catch(() => setResumeInfo(null));
+  }, [status?.current_chapter, report, running]);
 
   useEffect(() => {
     app()
@@ -137,6 +151,11 @@ export default function WritePanel({
     const unsubs = [
       eventsOn(WRITE_EVENTS.step, (p) => {
         if (!match(p.job_id)) return;
+        const nextStep = p.step || "";
+        if (p.elapsed_ms && prevStepRef.current) {
+          setStepDurations((d) => ({ ...d, [prevStepRef.current]: p.elapsed_ms! }));
+        }
+        prevStepRef.current = nextStep;
         setStep(p.step || "");
         setStepMessage(p.message || "");
       }),
@@ -183,6 +202,10 @@ export default function WritePanel({
         setRunning(false);
         setStep("done");
         onComplete();
+        app()
+          .GetWriteResumeInfo()
+          .then(setResumeInfo)
+          .catch(() => setResumeInfo(null));
       }),
     ];
     return () => unsubs.forEach((u) => u());
@@ -192,22 +215,31 @@ export default function WritePanel({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [streamText]);
 
-  const startWrite = useCallback(async () => {
+  const startWrite = useCallback(async (opts?: { resume?: boolean; chapter?: number }) => {
     setError("");
     setReport(null);
     setStreamText("");
     setStep("");
     setStepMessage("");
     setJobStatus("");
+    setStepDurations({});
+    prevStepRef.current = "";
+    const useResume = opts?.resume ?? resume;
+    const writeChapter =
+      opts?.chapter ??
+      (useResume && resumeInfo?.available ? resumeInfo.chapter : nextChapter);
     try {
-      setWritingChapter(nextChapter);
-      const endChapter = batchEndChapter > nextChapter ? batchEndChapter : 0;
+      setWritingChapter(writeChapter);
+      const endChapter = batchEndChapter > writeChapter ? batchEndChapter : 0;
       const job = await app().StartWriteChapter({
-        chapter: nextChapter,
+        chapter: writeChapter,
         end_chapter: endChapter,
         volume,
-        resume,
+        resume: useResume && !!resumeInfo?.available,
+        skip_review: skipReview,
         continue_on_error: continueOnError,
+        pinned_memory_ids: pinnedMemoryIds,
+        excluded_memory_ids: excludedMemoryIds,
       });
       jobIdRef.current = job.id;
       setJobId(job.id);
@@ -219,7 +251,14 @@ export default function WritePanel({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [nextChapter, volume, resume, batchEndChapter, continueOnError]);
+  }, [nextChapter, volume, resume, skipReview, batchEndChapter, continueOnError, pinnedMemoryIds, excludedMemoryIds, resumeInfo]);
+
+  const continueLastWrite = useCallback(async () => {
+    if (!resumeInfo?.available) return;
+    setResume(true);
+    setSidebarOpen(false);
+    await startWrite({ resume: true, chapter: resumeInfo.chapter });
+  }, [resumeInfo, startWrite]);
 
   const cancelWrite = async () => {
     if (!jobId) return;
@@ -330,14 +369,25 @@ export default function WritePanel({
               </button>
               {optionsOpen && (
                 <div className="absolute right-0 top-full z-10 mt-1 w-56 space-y-2 rounded-lg border border-studio-border bg-studio-panel p-3 text-xs shadow-card">
+                  {!resumeInfo?.available && (
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={resume}
+                        onChange={(e) => setResume(e.target.checked)}
+                        className="rounded border-studio-border"
+                      />
+                      断点续写
+                    </label>
+                  )}
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={resume}
-                      onChange={(e) => setResume(e.target.checked)}
+                      checked={skipReview}
+                      onChange={(e) => setSkipReview(e.target.checked)}
                       className="rounded border-studio-border"
                     />
-                    断点续写
+                    跳过审查（高级）
                   </label>
                   <label className="block">
                     <span className="text-studio-muted">连续写到第</span>
@@ -377,7 +427,7 @@ export default function WritePanel({
             ) : (
               <button
                 type="button"
-                onClick={startWrite}
+                onClick={() => void startWrite()}
                 disabled={!hasKey || !gateOK}
                 className="inline-flex items-center gap-2 rounded-xl bg-studio-accent px-5 py-2 text-sm font-medium text-studio-on-accent hover:brightness-110 disabled:opacity-40"
               >
@@ -388,6 +438,30 @@ export default function WritePanel({
           </div>
         </div>
       </header>
+
+      {resumeInfo?.available && !running && !report && (
+        <div className="mx-5 mt-3 shrink-0 rounded-lg border border-studio-accent/30 bg-studio-accent/10 px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-medium text-studio-text">可继续上次未完成的流水线</p>
+              <p className="mt-1 text-xs text-studio-muted">
+                第 {resumeInfo.chapter} 章
+                {resumeInfo.step_label ? ` · 停在「${resumeInfo.step_label}」` : ""}
+                {resumeInfo.last_message ? ` · ${resumeInfo.last_message}` : ""}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void continueLastWrite()}
+              disabled={!hasKey || !gateOK}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-studio-accent px-3 py-1.5 text-xs font-medium text-studio-on-accent hover:brightness-110 disabled:opacity-40"
+            >
+              <Play className="h-3.5 w-3.5" />
+              继续上次
+            </button>
+          </div>
+        </div>
+      )}
 
       {alertMessage && (
         <div
@@ -409,12 +483,24 @@ export default function WritePanel({
               onFix={handleGateFix}
               onReadyChange={setGateOK}
             />
-            <WriteContextPanel chapter={chapter} volume={volume} defaultCollapsed />
+            <WriteContextPanel
+              chapter={chapter}
+              volume={volume}
+              defaultCollapsed
+              pinnedIds={pinnedMemoryIds}
+              excludedIds={excludedMemoryIds}
+              onPinnedChange={setPinnedMemoryIds}
+              onExcludedChange={setExcludedMemoryIds}
+            />
           </aside>
         )}
 
         <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
-          <WriteStepper currentStep={step} running={running || !!step} />
+          <WriteStepper
+            currentStep={step}
+            running={running || !!step}
+            stepDurations={stepDurations}
+          />
 
           {(running || step) && (
             <div className="flex shrink-0 flex-col gap-1">

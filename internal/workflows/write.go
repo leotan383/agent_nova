@@ -36,12 +36,15 @@ func NewWriteWorkflow(cfg *config.Config, p *project.Project, st *store.Store) *
 }
 
 type WriteOptions struct {
-	Chapter int
-	Volume  int
-	Resume  bool
-	Stream  bool
-	OnDelta func(string) error
-	OnStep  func(step, message string) error
+	Chapter           int
+	Volume            int
+	Resume            bool
+	SkipReview        bool
+	PinnedMemoryIDs   []string
+	ExcludedMemoryIDs []string
+	Stream            bool
+	OnDelta           func(string) error
+	OnStep            func(step, message string) error
 }
 
 func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st *store.Store, opts WriteOptions) (*report.Report, error) {
@@ -80,7 +83,12 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 
 	// 组装写章上下文：近章摘要、设定、卷纲、记忆、FTS 命中
 	emit("context", "组装写作上下文")
-	cb := contextbuilder.Builder{Proj: p, Store: st, Config: w.Config}
+	cb := contextbuilder.Builder{
+		Proj: p, Store: st, Config: w.Config,
+		MemoryPrefs: contextbuilder.MemoryPrefs{
+			PinnedIDs: opts.PinnedMemoryIDs, ExcludedIDs: opts.ExcludedMemoryIDs,
+		},
+	}
 	snap, err := cb.Build(opts.Chapter, opts.Volume)
 	if err != nil {
 		return nil, err
@@ -127,7 +135,7 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 	}
 
 	// Step 2: 审查 + 润色 — 内置轻量 review pass，覆盖正文文件
-	if startStep == "review" || startStep == "polish" {
+	if !opts.SkipReview && (startStep == "review" || startStep == "polish") {
 		anchor := cb.BookContext(opts.Chapter, opts.Volume)
 		emit("review", "审查并润色")
 		outlineRef := snap.ChapterOutline
@@ -167,6 +175,13 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 		}
 		content = polished
 		ledger.Record("polish", "done", chapterPath)
+	} else if startStep == "review" || startStep == "polish" {
+		if content == "" {
+			chapterPath, content = loadChapterFile(p, opts.Chapter)
+		}
+		if opts.SkipReview {
+			emit("review", "已跳过审查（作者选项）")
+		}
 	}
 
 	// Step 3: 摘要 — 供后续章节上下文链使用

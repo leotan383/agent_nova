@@ -10,6 +10,7 @@ import (
 
 	"github.com/tanlian/agent_nova/internal/app"
 	"github.com/tanlian/agent_nova/internal/config"
+	"github.com/tanlian/agent_nova/internal/pipeline"
 	"github.com/tanlian/agent_nova/internal/report"
 	"github.com/tanlian/agent_nova/internal/usage"
 	"github.com/tanlian/agent_nova/internal/workflows"
@@ -26,11 +27,14 @@ const (
 
 // StartWriteInput 写章请求。
 type StartWriteInput struct {
-	Chapter         int  `json:"chapter"`
-	EndChapter      int  `json:"end_chapter"` // 0 或与 chapter 相同表示单章；大于 chapter 时连续写多章
-	Volume          int  `json:"volume"`
-	Resume          bool `json:"resume"`
-	ContinueOnError bool `json:"continue_on_error"`
+	Chapter           int      `json:"chapter"`
+	EndChapter        int      `json:"end_chapter"`
+	Volume            int      `json:"volume"`
+	Resume            bool     `json:"resume"`
+	SkipReview        bool     `json:"skip_review"`
+	ContinueOnError   bool     `json:"continue_on_error"`
+	PinnedMemoryIDs   []string `json:"pinned_memory_ids"`
+	ExcludedMemoryIDs []string `json:"excluded_memory_ids"`
 }
 
 // WriteJobInfo 写章任务信息（立即返回，进度走事件）。
@@ -88,8 +92,13 @@ type writeJob struct {
 	chapters        []int
 	chapterIdx      int
 	continueOnError bool
+	skipReview      bool
 	volume          int
 	resume          bool
+	pinnedMemoryIDs []string
+	excludedMemoryIDs []string
+	stepStarted     time.Time
+	lastStep        string
 }
 
 func (j *writeJob) appendDelta(delta string) {
@@ -172,7 +181,10 @@ func (a *App) StartWriteChapter(in StartWriteInput) (WriteJobInfo, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &writeJob{
 		chapters: chapters, chapterIdx: 0,
-		continueOnError: in.ContinueOnError, volume: in.Volume, resume: in.Resume,
+		continueOnError: in.ContinueOnError, skipReview: in.SkipReview,
+		volume: in.Volume, resume: in.Resume,
+		pinnedMemoryIDs: in.PinnedMemoryIDs, excludedMemoryIDs: in.ExcludedMemoryIDs,
+		stepStarted:     time.Now(),
 		info: WriteJobInfo{
 			ID: id, Chapter: chapters[0], Volume: in.Volume, Status: "pending",
 			TotalInBatch: len(chapters), BatchIndex: 1,
@@ -226,6 +238,9 @@ func (a *App) runWriteBatch(ctx context.Context, projectRoot, id string, job *wr
 			Chapter: chapter,
 			Volume:  job.volume,
 			Resume:  useResume,
+			SkipReview:        job.skipReview,
+			PinnedMemoryIDs:   job.pinnedMemoryIDs,
+			ExcludedMemoryIDs: job.excludedMemoryIDs,
 			Stream:  true,
 			OnDelta: func(delta string) error {
 				select {
@@ -411,9 +426,67 @@ func (a *App) emitWriteDelta(jobID string, chapter int, delta string) {
 }
 
 func (a *App) emitWriteStep(jobID string, chapter int, step, message string) {
+	var elapsedMs int64
+	a.write.mu.Lock()
+	if job, ok := a.write.jobs[jobID]; ok && job.lastStep != "" {
+		elapsedMs = time.Since(job.stepStarted).Milliseconds()
+	}
+	if job, ok := a.write.jobs[jobID]; ok {
+		job.lastStep = step
+		job.stepStarted = time.Now()
+	}
+	a.write.mu.Unlock()
 	runtime.EventsEmit(a.ctx, eventWriteStep, map[string]any{
 		"job_id": jobID, "chapter": chapter, "step": step, "message": message,
+		"elapsed_ms": elapsedMs,
 	})
+}
+
+// WriteResumeInfoDTO 断点续写信息（run_ledger）。
+type WriteResumeInfoDTO struct {
+	Available   bool   `json:"available"`
+	Chapter     int    `json:"chapter"`
+	ResumeStep  string `json:"resume_step"`
+	StepLabel   string `json:"step_label"`
+	LastMessage string `json:"last_message"`
+}
+
+var writeStepLabels = map[string]string{
+	"draft": "起草", "review": "审查润色", "polish": "润色", "summary": "摘要",
+	"extract": "沉淀记忆", "taskbook": "任务书", "context": "上下文", "gate": "检查",
+}
+
+// GetWriteResumeInfo 返回是否存在可续跑的写章流水线。
+func (a *App) GetWriteResumeInfo() (WriteResumeInfoDTO, error) {
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return WriteResumeInfoDTO{}, err
+	}
+	var out WriteResumeInfoDTO
+	err = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		ledger, err := pipeline.LoadLedger(actx.Project.RunLedgerPath())
+		if err != nil {
+			return err
+		}
+		if !ledger.IsResumable() {
+			return nil
+		}
+		step := ledger.ResumeStep()
+		out.Available = true
+		out.Chapter = ledger.Chapter
+		out.ResumeStep = step
+		if label, ok := writeStepLabels[step]; ok {
+			out.StepLabel = label
+		} else {
+			out.StepLabel = step
+		}
+		if len(ledger.Steps) > 0 {
+			last := ledger.Steps[len(ledger.Steps)-1]
+			out.LastMessage = last.Message
+		}
+		return nil
+	})
+	return out, err
 }
 
 func (a *App) emitWriteStatus(jobID string, chapter int, status, message string) {

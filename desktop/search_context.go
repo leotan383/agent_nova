@@ -30,6 +30,14 @@ type MemoryRecallDTO struct {
 	Score    float64 `json:"score"`
 }
 
+// WriteContextInput 写章上下文请求（含记忆 pin/排除）。
+type WriteContextInput struct {
+	Chapter           int      `json:"chapter"`
+	Volume            int      `json:"volume"`
+	PinnedMemoryIDs   []string `json:"pinned_memory_ids"`
+	ExcludedMemoryIDs []string `json:"excluded_memory_ids"`
+}
+
 // WriteContextDTO 写章上下文快照。
 type WriteContextDTO struct {
 	Chapter          int               `json:"chapter"`
@@ -77,7 +85,9 @@ func (a *App) SearchProject(query string, limit int) ([]SearchHitDTO, error) {
 }
 
 // GetWriteContext 组装指定章节的写作上下文。
-func (a *App) GetWriteContext(chapter, volume int) (WriteContextDTO, error) {
+func (a *App) GetWriteContext(in WriteContextInput) (WriteContextDTO, error) {
+	chapter := in.Chapter
+	volume := in.Volume
 	if chapter <= 0 {
 		return WriteContextDTO{}, fmt.Errorf("无效章号")
 	}
@@ -90,7 +100,12 @@ func (a *App) GetWriteContext(chapter, volume int) (WriteContextDTO, error) {
 	}
 	var result WriteContextDTO
 	err = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
-		cb := contextbuilder.Builder{Proj: actx.Project, Store: actx.Store, Config: actx.Config}
+		cb := contextbuilder.Builder{
+			Proj: actx.Project, Store: actx.Store, Config: actx.Config,
+			MemoryPrefs: contextbuilder.MemoryPrefs{
+				PinnedIDs: in.PinnedMemoryIDs, ExcludedIDs: in.ExcludedMemoryIDs,
+			},
+		}
 		snap, err := cb.Build(chapter, volume)
 		if err != nil {
 			return err

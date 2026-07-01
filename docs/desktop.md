@@ -84,7 +84,7 @@ desktop/
 | `GetStatus` / `GetProjectHealth` | 创作状态 / 健康待办 |
 | `ListChapters` / `GetChapterContent` | 章节列表与正文 |
 | `GetChapterDocument` / `SaveChapterDocument` | 正文/审查/摘要读写 |
-| `GetWriteContext` / `GetWriteGate` | 写章上下文与门禁 |
+| `GetWriteContext` / `GetWriteGate` | 写章上下文与门禁（上下文支持 pin/排除记忆 ID） |
 | `GetProjectTokenUsage` | 项目累计 LLM token 用量 |
 
 ### AI 工作流
@@ -93,8 +93,9 @@ desktop/
 |------|------|
 | `StartDiscover` / `SendDiscoverMessage` / `FinishDiscover` / `CreateNovelFromDiscover` | AI 探讨立项 |
 | `StartPlanVolume` / `CancelPlanVolume` | AI 生成卷纲 |
-| `StartWriteChapter` / `CancelWriteChapter` | 流式写章 |
+| `StartWriteChapter` / `CancelWriteChapter` | 流式写章（`skip_review`、记忆 pin/排除、`resume`） |
 | `GetWriteJob` / `GetWriteJobState` / `GetActiveWriteJob` | 写章任务状态与流式缓冲恢复 |
+| `GetWriteResumeInfo` | 断点续写：run_ledger 是否可续跑及停在哪一步 |
 | `StartReviewChapter` / `CancelReviewChapter` | 章节审查 |
 | `SendChapterCoachMessage` / `StartChapterRevision` | 改稿讨论与修订 |
 | `StartSelectionTransform` | 选区快捷改写 |
@@ -121,7 +122,7 @@ desktop/
 | 事件 | payload 字段 | 说明 |
 |------|----------------|------|
 | `write:delta` | `job_id`, `chapter`, `delta` | 起草正文流式片段 |
-| `write:step` | `job_id`, `chapter`, `step`, `message` | 流水线步骤 |
+| `write:step` | `job_id`, `chapter`, `step`, `message`, `elapsed_ms` | 流水线步骤（含上一步耗时 ms） |
 | `write:status` | `job_id`, `chapter`, `status`, `message` | pending / running / done / failed / cancelled |
 | `write:done` | `job_id`, `chapter`, `report`, `batch_complete`, `batch_index`, `total_in_batch` | 完成报告（含 token_usage；批量写章时中间章 `batch_complete=false`） |
 | `write:error` | `job_id`, `chapter`, `error` | 错误 |
@@ -145,6 +146,9 @@ desktop/
 | `nova backup` / `doctor` / `preflight` | ✅ | ✅ Overview 项目工具 |
 | `memory bootstrap` | ✅ | ✅ Overview 设定→记忆 |
 | 批量连续写章 | ✅ | ✅ WritePanel 连续写到第 N 章 |
+| 写章步骤耗时 / 跳过审查 | ✅ `--skip-review` | ✅ WriteStepper + 选项 |
+| 写前记忆 pin/排除 | — | ✅ WriteContextPanel |
+| 断点续写 | ✅ `--resume` | ✅ WritePanel「继续上次」 |
 | 新手引导 | — | ✅ |
 | Token 用量统计 | — | ✅ |
 

@@ -11,9 +11,17 @@ const STEPS = [
   { id: "done", label: "完成" },
 ] as const;
 
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m${s % 60}s`;
+}
+
 type Props = {
   currentStep: string;
   running: boolean;
+  stepDurations?: Record<string, number>;
 };
 
 function stepIndex(id: string): number {
@@ -22,7 +30,7 @@ function stepIndex(id: string): number {
   return i;
 }
 
-export default function WriteStepper({ currentStep, running }: Props) {
+export default function WriteStepper({ currentStep, running, stepDurations = {} }: Props) {
   const activeIdx = stepIndex(currentStep);
   const displayIdx = activeIdx >= 0 ? activeIdx : running ? 0 : -1;
 
@@ -42,6 +50,7 @@ export default function WriteStepper({ currentStep, running }: Props) {
           const done = finished || displayIdx > i;
           const active = !finished && (s.id === currentStep || (running && displayIdx === i));
           const pending = !finished && displayIdx >= 0 && i > displayIdx;
+          const duration = stepDurations[s.id];
 
           return (
             <li key={s.id} className="flex items-center">
@@ -53,7 +62,7 @@ export default function WriteStepper({ currentStep, running }: Props) {
                 />
               )}
               <div
-                className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium transition sm:px-2.5 ${
+                className={`flex flex-col items-center gap-0.5 rounded-full px-2 py-1 transition sm:px-2.5 ${
                   active
                     ? "bg-studio-accent/15 text-studio-accent ring-1 ring-studio-accent/30"
                     : done
@@ -63,18 +72,23 @@ export default function WriteStepper({ currentStep, running }: Props) {
                         : "text-studio-muted"
                 }`}
               >
-                <span
-                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] ${
-                    active
-                      ? "bg-studio-accent text-studio-on-accent"
-                      : done
-                        ? "bg-[rgb(var(--studio-diff-add-bg))]"
-                        : "border border-studio-border bg-studio-bg"
-                  }`}
-                >
-                  {done && !active ? <Check className="h-2.5 w-2.5" /> : i + 1}
-                </span>
-                <span className="hidden sm:inline">{s.label}</span>
+                <div className="flex items-center gap-1.5 text-[11px] font-medium">
+                  <span
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] ${
+                      active
+                        ? "bg-studio-accent text-studio-on-accent"
+                        : done
+                          ? "bg-[rgb(var(--studio-diff-add-bg))]"
+                          : "border border-studio-border bg-studio-bg"
+                    }`}
+                  >
+                    {done && !active ? <Check className="h-2.5 w-2.5" /> : i + 1}
+                  </span>
+                  <span className="hidden sm:inline">{s.label}</span>
+                </div>
+                {duration != null && duration > 0 && done && !active && (
+                  <span className="text-[9px] tabular-nums opacity-70">{formatDuration(duration)}</span>
+                )}
               </div>
             </li>
           );

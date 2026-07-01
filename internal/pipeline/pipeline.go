@@ -79,6 +79,15 @@ func (l *RunLedger) ResumeStep() string {
 	return last.Name
 }
 
+// IsResumable 是否存在未完成的写章流水线（可 --resume）。
+func (l *RunLedger) IsResumable() bool {
+	if l.Chapter <= 0 || len(l.Steps) == 0 {
+		return false
+	}
+	last := l.Steps[len(l.Steps)-1]
+	return !(last.Name == "commit" && last.Status == "done")
+}
+
 type GateStage string
 
 const (
