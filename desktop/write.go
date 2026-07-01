@@ -228,6 +228,24 @@ func (a *App) IsWriteRunning() bool {
 	return false
 }
 
+// ActiveWriteJobDTO 进行中的写章任务（用于 UI 恢复）。
+type ActiveWriteJobDTO struct {
+	Active bool         `json:"active"`
+	Job    WriteJobInfo `json:"job"`
+}
+
+// GetActiveWriteJob 返回进行中的写章任务，若无则 active=false。
+func (a *App) GetActiveWriteJob() ActiveWriteJobDTO {
+	a.write.mu.Lock()
+	defer a.write.mu.Unlock()
+	for _, j := range a.write.jobs {
+		if j.info.Status == "running" || j.info.Status == "pending" {
+			return ActiveWriteJobDTO{Active: true, Job: j.info}
+		}
+	}
+	return ActiveWriteJobDTO{}
+}
+
 func (a *App) emitWriteDelta(jobID string, chapter int, delta string) {
 	runtime.EventsEmit(a.ctx, eventWriteDelta, map[string]any{
 		"job_id": jobID, "chapter": chapter, "delta": delta,

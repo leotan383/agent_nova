@@ -639,6 +639,18 @@ func (s *Store) FTSStats() (chapterCount, settingCount int, err error) {
 	return chapterCount, settingCount, nil
 }
 
+func (s *Store) GetReview(chapter int) (ReviewRecord, error) {
+	var r ReviewRecord
+	err := s.db.QueryRow(
+		`SELECT chapter_number, hook_score, cool_point, debt, report_json, path FROM reviews WHERE chapter_number=?`,
+		chapter,
+	).Scan(&r.ChapterNumber, &r.HookScore, &r.CoolPoint, &r.Debt, &r.ReportJSON, &r.Path)
+	if err == sql.ErrNoRows {
+		return ReviewRecord{}, fmt.Errorf("review not found: chapter %d", chapter)
+	}
+	return r, err
+}
+
 func (s *Store) ListReviews() ([]ReviewRecord, error) {
 	rows, err := s.db.Query(`SELECT chapter_number, hook_score, cool_point, debt, report_json, path FROM reviews ORDER BY chapter_number`)
 	if err != nil {

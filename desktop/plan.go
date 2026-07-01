@@ -248,6 +248,24 @@ func (a *App) IsPlanRunning() bool {
 	return false
 }
 
+// ActivePlanJobDTO 进行中的卷纲任务。
+type ActivePlanJobDTO struct {
+	Active bool        `json:"active"`
+	Job    PlanJobInfo `json:"job"`
+}
+
+// GetActivePlanJob 返回进行中的卷纲任务。
+func (a *App) GetActivePlanJob() ActivePlanJobDTO {
+	a.plan.mu.Lock()
+	defer a.plan.mu.Unlock()
+	for _, j := range a.plan.jobs {
+		if j.info.Status == "running" || j.info.Status == "pending" {
+			return ActivePlanJobDTO{Active: true, Job: j.info}
+		}
+	}
+	return ActivePlanJobDTO{}
+}
+
 func (a *App) emitPlanStatus(jobID string, volume int, status, message string) {
 	runtime.EventsEmit(a.ctx, eventPlanStatus, map[string]any{
 		"job_id": jobID, "volume": volume, "status": status, "message": message,

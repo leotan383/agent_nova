@@ -196,6 +196,66 @@ func (a *App) IsReviewRunning() bool {
 	return false
 }
 
+// ActiveReviewJobDTO 进行中的审查任务。
+type ActiveReviewJobDTO struct {
+	Active bool          `json:"active"`
+	Job    ReviewJobInfo `json:"job"`
+}
+
+// GetActiveReviewJob 返回进行中的审查任务。
+func (a *App) GetActiveReviewJob() ActiveReviewJobDTO {
+	a.review.mu.Lock()
+	defer a.review.mu.Unlock()
+	for _, j := range a.review.jobs {
+		if j.info.Status == "running" || j.info.Status == "pending" {
+			return ActiveReviewJobDTO{Active: true, Job: j.info}
+		}
+	}
+	return ActiveReviewJobDTO{}
+}
+
+// ChapterReviewMetricsDTO 章节审查结构化指标。
+type ChapterReviewMetricsDTO struct {
+	Chapter   int      `json:"chapter"`
+	Exists    bool     `json:"exists"`
+	HookScore float64  `json:"hook_score"`
+	CoolPoint string   `json:"cool_point"`
+	Debt      string   `json:"debt"`
+	Issues    []string `json:"issues"`
+}
+
+// GetChapterReviewMetrics 读取章节审查指标（来自数据库）。
+func (a *App) GetChapterReviewMetrics(chapter int) (ChapterReviewMetricsDTO, error) {
+	if chapter <= 0 {
+		return ChapterReviewMetricsDTO{}, fmt.Errorf("无效章号")
+	}
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return ChapterReviewMetricsDTO{}, err
+	}
+	var out ChapterReviewMetricsDTO
+	err = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		r, err := actx.Store.GetReview(chapter)
+		if err != nil {
+			return nil
+		}
+		out = ChapterReviewMetricsDTO{
+			Chapter: chapter, Exists: true,
+			HookScore: r.HookScore, CoolPoint: r.CoolPoint, Debt: r.Debt,
+		}
+		if r.ReportJSON != "" {
+			var payload struct {
+				Issues []string `json:"issues"`
+			}
+			if json.Unmarshal([]byte(r.ReportJSON), &payload) == nil {
+				out.Issues = payload.Issues
+			}
+		}
+		return nil
+	})
+	return out, err
+}
+
 func (a *App) emitReviewStatus(jobID string, chapter int, status, message string) {
 	runtime.EventsEmit(a.ctx, eventReviewStatus, map[string]any{
 		"job_id": jobID, "chapter": chapter, "status": status, "message": message,

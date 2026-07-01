@@ -170,6 +170,36 @@ export interface ReviewReportDTO {
   next_steps?: string[];
 }
 
+export interface ChapterReviewMetricsDTO {
+  chapter: number;
+  exists: boolean;
+  hook_score: number;
+  cool_point: string;
+  debt: string;
+  issues: string[];
+}
+
+export interface ActiveWriteJobDTO {
+  active: boolean;
+  job: WriteJobInfo;
+}
+
+export interface ActivePlanJobDTO {
+  active: boolean;
+  job: PlanJobInfo;
+}
+
+export interface ActiveReviewJobDTO {
+  active: boolean;
+  job: ReviewJobInfo;
+}
+
+export interface MemoryConflictDTO {
+  subject: string;
+  count: number;
+  memories: MemoryDTO[];
+}
+
 export interface MemoryDTO {
   id: string;
   category: string;
@@ -413,21 +443,26 @@ interface AppBindings {
   CreateMemory(input: CreateMemoryInput): Promise<MemoryDTO>;
   ResolveForeshadow(id: string, resolvedChapter: number): Promise<void>;
   UpdateForeshadow(id: string, description: string): Promise<void>;
+  FindMemoryConflicts(): Promise<MemoryConflictDTO[]>;
   HasAPIKey(): Promise<boolean>;
   AppInfo(): Promise<{ name: string; version: string }>;
   StartWriteChapter(input: StartWriteInput): Promise<WriteJobInfo>;
   CancelWriteChapter(jobID: string): Promise<void>;
   GetWriteJob(jobID: string): Promise<WriteJobInfo>;
   IsWriteRunning(): Promise<boolean>;
+  GetActiveWriteJob(): Promise<ActiveWriteJobDTO>;
   GetVolumeOutline(volume: number): Promise<VolumeOutlineDTO>;
   SaveVolumeOutline(volume: number, body: string): Promise<void>;
   StartPlanVolume(input: StartPlanInput): Promise<PlanJobInfo>;
   CancelPlanVolume(jobID: string): Promise<void>;
   IsPlanRunning(): Promise<boolean>;
+  GetActivePlanJob(): Promise<ActivePlanJobDTO>;
   RebuildProjectIndex(): Promise<void>;
   StartReviewChapter(input: StartReviewInput): Promise<ReviewJobInfo>;
   CancelReviewChapter(jobID: string): Promise<void>;
   IsReviewRunning(): Promise<boolean>;
+  GetActiveReviewJob(): Promise<ActiveReviewJobDTO>;
+  GetChapterReviewMetrics(chapter: number): Promise<ChapterReviewMetricsDTO>;
   ListMemories(): Promise<MemoryDTO[]>;
   ListForeshadows(status: string): Promise<ForeshadowDTO[]>;
   SendChapterCoachMessage(chapter: number, message: string): Promise<void>;

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ClipboardCheck, Loader2, Square } from "lucide-react";
 import { REVIEW_EVENTS, eventsOn } from "../lib/runtime";
-import { ChapterDocDTO, ReviewReportDTO, app } from "../lib/wails";
 import { stripReviewMetricsSuffix } from "../lib/chapterBody";
+import { mergeReviewMetrics, parseReviewMetricsFromText, ReviewMetrics } from "../lib/reviewMetrics";
+import { ChapterDocDTO, ReviewReportDTO, app } from "../lib/wails";
 import { confirmUnsavedLeave } from "../lib/unsavedGuard";
 import MarkdownEditor from "./MarkdownEditor";
+import ReviewSummaryPanel from "./ReviewSummaryPanel";
 
 type DocKind = "body" | "review" | "summary";
 
@@ -43,6 +45,7 @@ export default function ChapterDocumentPanel({
   const [jobStatus, setJobStatus] = useState("");
   const [jobMessage, setJobMessage] = useState("");
   const [reviewReport, setReviewReport] = useState<ReviewReportDTO | null>(null);
+  const [reviewMetrics, setReviewMetrics] = useState<ReviewMetrics | null>(null);
   const [reviewRunning, setReviewRunning] = useState(false);
   const jobIdRef = useRef("");
   const autoReviewStartedRef = useRef(false);
@@ -64,6 +67,16 @@ export default function ChapterDocumentPanel({
     }
   }, [chapter]);
 
+  const loadReviewMetrics = useCallback(async (reviewBody: string) => {
+    try {
+      const dto = await app().GetChapterReviewMetrics(chapter);
+      const fromText = parseReviewMetricsFromText(reviewBody);
+      setReviewMetrics(mergeReviewMetrics(dto, fromText));
+    } catch {
+      setReviewMetrics(parseReviewMetricsFromText(reviewBody));
+    }
+  }, [chapter]);
+
   useEffect(() => {
     setTab(initialTab);
     autoReviewStartedRef.current = false;
@@ -71,11 +84,34 @@ export default function ChapterDocumentPanel({
   }, [chapter, initialTab, loadAll]);
 
   useEffect(() => {
+    if (!docs.review?.exists) {
+      setReviewMetrics(null);
+      return;
+    }
+    void loadReviewMetrics(docs.review.body ?? "");
+  }, [docs.review?.body, docs.review?.exists, loadReviewMetrics]);
+
+  useEffect(() => {
     app()
       .HasAPIKey()
       .then(setHasKey)
       .catch(() => setHasKey(false));
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { active, job } = await app().GetActiveReviewJob();
+        if (!active || !job.id || job.chapter !== chapter) return;
+        jobIdRef.current = job.id;
+        setJobId(job.id);
+        setJobStatus(job.status);
+        setReviewRunning(job.status === "pending" || job.status === "running");
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [chapter]);
 
   useEffect(() => {
     const match = (id?: string) => !jobIdRef.current || id === jobIdRef.current;
@@ -162,6 +198,9 @@ export default function ChapterDocumentPanel({
           ? { ...prev[tab]!, body, exists: true }
           : { kind: tab, chapter, title: "", body, exists: true },
       }));
+      if (tab === "review") {
+        void loadReviewMetrics(body);
+      }
       onSaved?.();
     } finally {
       setSaving(false);
@@ -262,21 +301,26 @@ export default function ChapterDocumentPanel({
         </p>
       )}
 
-      <MarkdownEditor
-        key={`${chapter}-${tab}`}
-        value={editorValue}
-        paper
-        saving={saving}
-        onSave={save}
-        selectionChapter={tab === "body" ? chapter : undefined}
-        emptyHint={
-          tab === "body"
-            ? "正文为空"
-            : tab === "review"
-              ? "暂无审查报告"
-              : "暂无摘要"
-        }
-      />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {tab === "review" && reviewMetrics && (
+          <ReviewSummaryPanel metrics={reviewMetrics} compact />
+        )}
+        <MarkdownEditor
+          key={`${chapter}-${tab}`}
+          value={editorValue}
+          paper
+          saving={saving}
+          onSave={save}
+          selectionChapter={tab === "body" ? chapter : undefined}
+          emptyHint={
+            tab === "body"
+              ? "正文为空"
+              : tab === "review"
+                ? "暂无审查报告"
+                : "暂无摘要"
+          }
+        />
+      </div>
     </div>
   );
 }

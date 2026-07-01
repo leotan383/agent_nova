@@ -108,3 +108,37 @@ func (a *App) UpdateForeshadow(id, description string) error {
 		return actx.Store.UpdateForeshadowDescription(id, description)
 	})
 }
+
+// MemoryConflictDTO 同 subject 的多条记忆冲突。
+type MemoryConflictDTO struct {
+	Subject  string      `json:"subject"`
+	Count    int         `json:"count"`
+	Memories []MemoryDTO `json:"memories"`
+}
+
+// FindMemoryConflicts 列出 subject 重复的记忆冲突。
+func (a *App) FindMemoryConflicts() (out []MemoryConflictDTO, err error) {
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return nil, err
+	}
+	err = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		conflicts, err := actx.Store.FindMemoryConflicts()
+		if err != nil {
+			return err
+		}
+		out = make([]MemoryConflictDTO, len(conflicts))
+		for i, c := range conflicts {
+			out[i] = MemoryConflictDTO{Subject: c.Subject, Count: c.Count}
+			out[i].Memories = make([]MemoryDTO, len(c.Memories))
+			for j, m := range c.Memories {
+				out[i].Memories[j] = MemoryDTO{
+					ID: m.ID, Category: m.Category, Subject: m.Subject, Content: m.Content,
+					SourceChapter: m.SourceChapter, Status: m.Status,
+				}
+			}
+		}
+		return nil
+	})
+	return out, err
+}

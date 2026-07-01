@@ -14,17 +14,16 @@ import {
   PenLine,
   Search,
   Settings,
-  Boxes,
 } from "lucide-react";
 import { ChapterDTO, NovelCard, SearchHitDTO, StatusReport, app, phaseLabel } from "../lib/wails";
 import ChapterDocumentPanel from "../components/ChapterDocumentPanel";
+import ChapterStatusBadge from "../components/ChapterStatusBadge";
 import MemoryPanel, { MemoryFocus } from "../components/MemoryPanel";
 import WritePanel from "../components/WritePanel";
 import ChapterCoachPanel from "../components/ChapterCoachPanel";
 import ChapterVersionPanel from "../components/ChapterVersionPanel";
 import OverviewPanel from "../components/OverviewPanel";
 import VolumePlanPanel from "../components/VolumePlanPanel";
-import EntityPanel from "../components/EntityPanel";
 import ExportDialog from "../components/ExportDialog";
 import SettingsDialog from "../components/SettingsDialog";
 import SearchDialog, { SearchSession } from "../components/SearchDialog";
@@ -33,7 +32,7 @@ import WikiPanel from "../components/WikiPanel";
 import UnsavedChangesDialog from "../components/UnsavedChangesDialog";
 import { confirmUnsavedLeave, hasUnsavedChanges } from "../lib/unsavedGuard";
 
-type Tab = "overview" | "planning" | "write" | "chapters" | "memory" | "wiki" | "entities";
+type Tab = "overview" | "planning" | "write" | "chapters" | "memory" | "wiki";
 type ChapterDocTab = "body" | "review" | "summary";
 
 type NavSnapshot = {
@@ -293,14 +292,15 @@ export default function StudioPage() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
-  const navItems = [
+  const workflowNav = [
     { id: "overview" as Tab, label: "概览", icon: LayoutDashboard },
     { id: "planning" as Tab, label: "规划", icon: Map },
     { id: "write" as Tab, label: "写作", icon: PenLine },
     { id: "chapters" as Tab, label: "章节", icon: FileText },
+  ];
+  const referenceNav = [
     { id: "memory" as Tab, label: "记忆", icon: Brain },
-    { id: "entities" as Tab, label: "实体", icon: Boxes },
-    { id: "wiki" as Tab, label: "百科", icon: BookOpen },
+    { id: "wiki" as Tab, label: "设定", icon: BookOpen },
   ];
 
   return (
@@ -403,7 +403,26 @@ export default function StudioPage() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <aside className="w-52 shrink-0 overflow-y-auto border-r border-studio-border p-4">
           <nav className="space-y-1">
-            {navItems.map(({ id, label, icon: Icon }) => (
+            {workflowNav.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => switchTab(id)}
+                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
+                  tab === id
+                    ? "bg-studio-accent/15 text-studio-accent"
+                    : "text-studio-muted hover:bg-studio-panel hover:text-studio-text"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            ))}
+          </nav>
+          <div className="my-3 border-t border-studio-border/60" />
+          <p className="mb-2 px-3 text-[10px] font-medium uppercase tracking-wide text-studio-muted/60">资料</p>
+          <nav className="space-y-1">
+            {referenceNav.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
@@ -420,7 +439,7 @@ export default function StudioPage() {
             ))}
           </nav>
           <p className="mt-8 px-3 text-xs leading-relaxed text-studio-muted">
-            概览查看进度与待办；规划页编辑卷纲；章节页可与改稿顾问讨论。
+            写作流程在上方；记忆与设定在下方，供查阅与维护世界观。
           </p>
         </aside>
 
@@ -507,7 +526,10 @@ export default function StudioPage() {
                             selectedChapter === c.number ? "bg-studio-bg text-studio-accent" : ""
                           }`}
                         >
-                          <div className="font-medium">第{c.number}章</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">第{c.number}章</span>
+                            <ChapterStatusBadge status={c.status} compact />
+                          </div>
                           <div className="truncate text-xs text-studio-muted">
                             {c.title || "无标题"} · {c.word_count}字
                           </div>
@@ -579,12 +601,6 @@ export default function StudioPage() {
           {tab === "wiki" && (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <WikiPanel initialSelectedID={wikiSelectedID} />
-            </div>
-          )}
-
-          {tab === "entities" && (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <EntityPanel />
             </div>
           )}
         </main>

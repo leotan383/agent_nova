@@ -75,6 +75,25 @@ export default function WritePanel({
   }, []);
 
   useEffect(() => {
+    void (async () => {
+      try {
+        const { active, job } = await app().GetActiveWriteJob();
+        if (!active || !job.id) return;
+        jobIdRef.current = job.id;
+        setJobId(job.id);
+        setChapter(job.chapter);
+        setVolume(job.volume);
+        setJobStatus(job.status);
+        const isRunning = job.status === "pending" || job.status === "running";
+        setRunning(isRunning);
+        if (isRunning) setSidebarOpen(false);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     const match = (id?: string) => !jobIdRef.current || id === jobIdRef.current;
     const unsubs = [
       eventsOn(WRITE_EVENTS.step, (p) => {
@@ -314,14 +333,21 @@ export default function WritePanel({
           <WriteStepper currentStep={step} running={running || !!step} />
 
           {(running || step) && (
-            <div className="flex shrink-0 items-center gap-2 text-xs text-studio-muted">
-              {running && <Loader2 className="h-3.5 w-3.5 animate-spin text-studio-accent" />}
-              <span>
-                {stepLabels[step] || step || "准备中"}
-                {stepMessage ? ` · ${stepMessage}` : ""}
-              </span>
-              {jobStatus && (
-                <span className="rounded-full bg-studio-border px-2 py-0.5 text-[10px]">{jobStatus}</span>
+            <div className="flex shrink-0 flex-col gap-1">
+              <div className="flex items-center gap-2 text-xs text-studio-muted">
+                {running && <Loader2 className="h-3.5 w-3.5 animate-spin text-studio-accent" />}
+                <span>
+                  {stepLabels[step] || step || "准备中"}
+                  {stepMessage ? ` · ${stepMessage}` : ""}
+                </span>
+                {jobStatus && (
+                  <span className="rounded-full bg-studio-border px-2 py-0.5 text-[10px]">{jobStatus}</span>
+                )}
+              </div>
+              {running && !streamText && (
+                <p className="text-[11px] text-studio-muted/80">
+                  任务进行中。若刚切换回此页，已输出的正文无法回放，后续流式内容会继续追加。
+                </p>
               )}
             </div>
           )}

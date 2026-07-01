@@ -72,6 +72,25 @@ export default function VolumePlanPanel({ suggestedVolume, focusVolume, onComple
   }, [loadOutline]);
 
   useEffect(() => {
+    void (async () => {
+      try {
+        const { active, job } = await app().GetActivePlanJob();
+        if (!active || !job.id) return;
+        jobIdRef.current = job.id;
+        setJobId(job.id);
+        setJobStatus(job.status);
+        setRunning(job.status === "pending" || job.status === "running");
+        if (job.volume > 0 && job.volume !== volume) {
+          setVolume(job.volume);
+          setVolumeInput(String(job.volume));
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     const match = (id?: string) => !jobIdRef.current || id === jobIdRef.current;
     const unsubs = [
       eventsOn(PLAN_EVENTS.status, (p) => {
@@ -229,12 +248,17 @@ export default function VolumePlanPanel({ suggestedVolume, focusVolume, onComple
       {error && <div className="mb-3 studio-alert-error-compact">{error}</div>}
 
       {running && (
-        <div className="mb-3 flex items-center gap-2 rounded-lg border border-studio-border bg-studio-bg px-3 py-2 text-sm">
-          <Loader2 className="h-4 w-4 animate-spin text-studio-accent" />
-          <span>{jobMessage || "正在生成卷纲…"}</span>
-          {jobStatus && (
-            <span className="text-xs text-studio-muted">({jobStatus})</span>
-          )}
+        <div className="mb-3 flex flex-col gap-1 rounded-lg border border-studio-border bg-studio-bg px-3 py-2 text-sm">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-studio-accent" />
+            <span>{jobMessage || "正在生成卷纲…"}</span>
+            {jobStatus && (
+              <span className="text-xs text-studio-muted">({jobStatus})</span>
+            )}
+          </div>
+          <p className="text-[11px] text-studio-muted/80">
+            卷纲生成进行中。切换 Tab 后返回此页可继续查看进度。
+          </p>
         </div>
       )}
 
