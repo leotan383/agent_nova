@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/tanlian/agent_nova/internal/app"
 	"github.com/tanlian/agent_nova/internal/project"
@@ -114,6 +115,40 @@ type MemoryConflictDTO struct {
 	Subject  string      `json:"subject"`
 	Count    int         `json:"count"`
 	Memories []MemoryDTO `json:"memories"`
+}
+
+// MergeMemoriesInput 合并冲突记忆：保留 keep_id，归档其余并可更新正文。
+type MergeMemoriesInput struct {
+	KeepID      string   `json:"keep_id"`
+	ArchiveIDs  []string `json:"archive_ids"`
+	Content     string   `json:"content"`
+}
+
+// MergeMemories 合并记忆冲突：更新保留条目并归档其余。
+func (a *App) MergeMemories(in MergeMemoriesInput) error {
+	if in.KeepID == "" {
+		return fmt.Errorf("保留记忆 ID 不能为空")
+	}
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return err
+	}
+	return a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		if strings.TrimSpace(in.Content) != "" {
+			if err := actx.Store.UpdateMemoryContent(in.KeepID, strings.TrimSpace(in.Content)); err != nil {
+				return err
+			}
+		}
+		for _, id := range in.ArchiveIDs {
+			if id == "" || id == in.KeepID {
+				continue
+			}
+			if err := actx.Store.SetMemoryStatus(id, "archived"); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // FindMemoryConflicts 列出 subject 重复的记忆冲突。

@@ -513,17 +513,24 @@ GROUP BY subject HAVING cnt > 1`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []MemoryConflict
+	var pending []MemoryConflict
 	for rows.Next() {
 		var c MemoryConflict
 		if err := rows.Scan(&c.Subject, &c.Count); err != nil {
+			_ = rows.Close()
 			return nil, err
 		}
+		pending = append(pending, c)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	out := make([]MemoryConflict, 0, len(pending))
+	for _, c := range pending {
 		c.Memories, _ = s.QueryMemories("", c.Subject, 20)
 		out = append(out, c)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Store) QueryMemories(category, subject string, limit int) ([]Memory, error) {

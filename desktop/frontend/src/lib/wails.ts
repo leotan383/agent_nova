@@ -223,6 +223,57 @@ export interface MemoryConflictDTO {
   memories: MemoryDTO[];
 }
 
+export interface MergeMemoriesInput {
+  keep_id: string;
+  archive_ids: string[];
+  content: string;
+}
+
+export interface ConsistencySummaryDTO {
+  open_foreshadows: number;
+  overdue_foreshadows: number;
+  critical_foreshadows: number;
+  memory_conflicts: number;
+  entity_issues: number;
+  cross_issues: number;
+  total_issues: number;
+}
+
+export interface ForeshadowHealthDTO {
+  id: string;
+  description: string;
+  planted_chapter: number;
+  gap: number;
+  severity: string;
+}
+
+export interface EntityIssueDTO {
+  id: string;
+  name: string;
+  type: string;
+  issue_type: string;
+  detail: string;
+  last_chapter: number;
+  gap: number;
+}
+
+export interface CrossIssueDTO {
+  kind: string;
+  subject: string;
+  detail: string;
+  memory_id?: string;
+  entity_id?: string;
+}
+
+export interface ConsistencyReportDTO {
+  current_chapter: number;
+  summary: ConsistencySummaryDTO;
+  foreshadows: ForeshadowHealthDTO[];
+  memory_conflicts: MemoryConflictDTO[];
+  entity_issues: EntityIssueDTO[];
+  cross_issues: CrossIssueDTO[];
+}
+
 export interface MemoryDTO {
   id: string;
   category: string;
@@ -478,6 +529,8 @@ interface AppBindings {
   ResolveForeshadow(id: string, resolvedChapter: number): Promise<void>;
   UpdateForeshadow(id: string, description: string): Promise<void>;
   FindMemoryConflicts(): Promise<MemoryConflictDTO[]>;
+  MergeMemories(input: MergeMemoriesInput): Promise<void>;
+  GetConsistencyReport(): Promise<ConsistencyReportDTO>;
   HasAPIKey(): Promise<boolean>;
   AppInfo(): Promise<{ name: string; version: string }>;
   StartWriteChapter(input: StartWriteInput): Promise<WriteJobInfo>;

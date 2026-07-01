@@ -8,9 +8,10 @@ import {
   GitBranch,
   Loader2,
   PenLine,
+  ShieldAlert,
   Sparkles,
 } from "lucide-react";
-import { ProjectHealthDTO, ProjectTokenUsageDTO, StatusReport, app, formatWordCount, phaseLabel } from "../lib/wails";
+import { ConsistencyReportDTO, ProjectHealthDTO, ProjectTokenUsageDTO, StatusReport, app, formatWordCount, phaseLabel } from "../lib/wails";
 import { formatTokenUsage } from "../lib/tokenUsage";
 import OnboardingChecklist from "./OnboardingChecklist";
 import ProjectHealthPanel from "./ProjectHealthPanel";
@@ -29,6 +30,7 @@ type Props = {
   onGoToCurrentChapter: () => void;
   onGoToMemories: () => void;
   onGoToForeshadows: () => void;
+  onGoToConsistency: () => void;
 };
 
 export default function OverviewPanel({
@@ -45,6 +47,7 @@ export default function OverviewPanel({
   onGoToCurrentChapter,
   onGoToMemories,
   onGoToForeshadows,
+  onGoToConsistency,
 }: Props) {
   const nextChapter = Math.max(1, status.current_chapter + 1);
   const pct = Math.min(100, Math.max(0, status.progress_percent ?? 0));
@@ -137,6 +140,7 @@ export default function OverviewPanel({
           />
         </div>
         <div className="space-y-4 lg:col-span-2">
+          <ConsistencySummaryCard refreshKey={healthRefreshKey} onGoToConsistency={onGoToConsistency} />
           <TokenUsageCard refreshKey={healthRefreshKey} />
           <OverviewMetrics
             status={status}
@@ -152,6 +156,92 @@ export default function OverviewPanel({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function ConsistencySummaryCard({
+  refreshKey,
+  onGoToConsistency,
+}: {
+  refreshKey: number;
+  onGoToConsistency: () => void;
+}) {
+  const [report, setReport] = useState<ConsistencyReportDTO | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await app().GetConsistencyReport();
+      setReport(r);
+    } catch {
+      setReport(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load, refreshKey]);
+
+  const s = report?.summary;
+  const hasIssues = (s?.total_issues ?? 0) > 0;
+
+  return (
+    <div
+      className={`rounded-xl border p-4 ${
+        hasIssues
+          ? "border-[rgb(var(--studio-warning-border))] bg-[rgb(var(--studio-warning-bg))]"
+          : "border-studio-border bg-studio-panel"
+      }`}
+    >
+      <div className="mb-3 flex items-center gap-2">
+        <ShieldAlert className={`h-3.5 w-3.5 ${hasIssues ? "text-[rgb(var(--studio-warning-fg))]" : "text-studio-muted"}`} />
+        <h3 className="text-xs font-medium uppercase tracking-wide text-studio-muted">一致性</h3>
+      </div>
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-studio-muted">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          检测中…
+        </div>
+      ) : s ? (
+        <>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div>
+              <p className="text-[10px] text-studio-muted">Open 伏笔</p>
+              <p className="font-semibold tabular-nums">{s.open_foreshadows}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-studio-muted">超期伏笔</p>
+              <p className={`font-semibold tabular-nums ${s.overdue_foreshadows + s.critical_foreshadows > 0 ? "text-[rgb(var(--studio-warning-fg))]" : ""}`}>
+                {s.overdue_foreshadows + s.critical_foreshadows}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-studio-muted">记忆冲突</p>
+              <p className={`font-semibold tabular-nums ${s.memory_conflicts > 0 ? "text-[rgb(var(--studio-warning-fg))]" : ""}`}>
+                {s.memory_conflicts}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-studio-muted">待处理</p>
+              <p className={`font-semibold tabular-nums ${hasIssues ? "text-[rgb(var(--studio-warning-fg))]" : "text-[rgb(var(--studio-diff-add-stat))]"}`}>
+                {s.total_issues}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onGoToConsistency}
+            className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-studio-border px-3 py-2 text-sm text-studio-text transition hover:bg-studio-bg"
+          >
+            {hasIssues ? "查看并处理" : "打开一致性仪表盘"}
+            <ChevronRight className="h-4 w-4 text-studio-muted" />
+          </button>
+        </>
+      ) : null}
     </div>
   );
 }

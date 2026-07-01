@@ -12,9 +12,11 @@ import {
   Map,
   Search,
   Settings,
+  ShieldAlert,
 } from "lucide-react";
 import { ChapterDTO, NovelCard, SearchHitDTO, StatusReport, app, phaseLabel } from "../lib/wails";
 import ChaptersPanel, { ChapterDocTab, ChaptersView } from "../components/ChaptersPanel";
+import ConsistencyPanel from "../components/ConsistencyPanel";
 import MemoryPanel, { MemoryFocus } from "../components/MemoryPanel";
 import OverviewPanel from "../components/OverviewPanel";
 import VolumePlanPanel from "../components/VolumePlanPanel";
@@ -26,7 +28,7 @@ import WikiPanel from "../components/WikiPanel";
 import UnsavedChangesDialog from "../components/UnsavedChangesDialog";
 import { confirmUnsavedLeave, hasUnsavedChanges } from "../lib/unsavedGuard";
 
-type Tab = "overview" | "planning" | "chapters" | "memory" | "wiki";
+type Tab = "overview" | "planning" | "chapters" | "memory" | "consistency" | "wiki";
 
 type NavSnapshot = {
   tab: Tab;
@@ -192,6 +194,14 @@ export default function StudioPage() {
     setTab("memory");
   };
 
+  const goToConsistency = async () => {
+    if (tab === "consistency") return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
+    clearSearchReturn();
+    setTab("consistency");
+  };
+
   const goToPlanning = async (volume?: number) => {
     const ok = await confirmUnsavedLeave();
     if (!ok) return;
@@ -312,6 +322,7 @@ export default function StudioPage() {
   ];
   const referenceNav = [
     { id: "memory" as Tab, label: "记忆", icon: Brain },
+    { id: "consistency" as Tab, label: "一致性", icon: ShieldAlert },
     { id: "wiki" as Tab, label: "设定", icon: BookOpen },
   ];
 
@@ -496,6 +507,7 @@ export default function StudioPage() {
                 onGoToCurrentChapter={() => void goToCurrentChapter()}
                 onGoToMemories={() => void goToMemories()}
                 onGoToForeshadows={() => void goToForeshadows()}
+                onGoToConsistency={() => void goToConsistency()}
               />
             </div>
           )}
@@ -544,6 +556,23 @@ export default function StudioPage() {
                 focus={memoryFocus}
                 onFocusChange={setMemoryFocus}
                 highlightId={searchHighlightId}
+              />
+            </div>
+          )}
+
+          {tab === "consistency" && (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <ConsistencyPanel
+                refreshKey={healthRefreshKey}
+                currentChapter={status?.current_chapter ?? 0}
+                onGoToWiki={(wikiID) => {
+                  setWikiSelectedID(wikiID);
+                  setTab("wiki");
+                }}
+                onResolved={() => {
+                  setHealthRefreshKey((k) => k + 1);
+                  loadStudio();
+                }}
               />
             </div>
           )}

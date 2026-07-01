@@ -42,6 +42,9 @@ export default function MemoryPanel({ focus, onFocusChange, highlightId = "" }: 
   const [saving, setSaving] = useState(false);
   const [resolveID, setResolveID] = useState("");
   const [resolveChapter, setResolveChapter] = useState(0);
+  const [mergingSubject, setMergingSubject] = useState("");
+  const [mergeKeepID, setMergeKeepID] = useState("");
+  const [mergeContent, setMergeContent] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -178,6 +181,28 @@ export default function MemoryPanel({ focus, onFocusChange, highlightId = "" }: 
     }
   };
 
+  const mergeConflict = async (subject: string) => {
+    if (!mergeKeepID) return;
+    setSaving(true);
+    try {
+      const group = conflicts.find((c) => c.subject === subject);
+      if (!group) return;
+      await app().MergeMemories({
+        keep_id: mergeKeepID,
+        archive_ids: group.memories.filter((m) => m.id !== mergeKeepID).map((m) => m.id),
+        content: mergeContent.trim(),
+      });
+      setMergingSubject("");
+      setMergeKeepID("");
+      setMergeContent("");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-studio-muted">
@@ -221,11 +246,71 @@ export default function MemoryPanel({ focus, onFocusChange, highlightId = "" }: 
                       <div className="flex flex-wrap items-center gap-2 text-xs text-studio-muted">
                         <span className="rounded bg-studio-border px-2 py-0.5">{m.category}</span>
                         {m.source_chapter > 0 && <span>第 {m.source_chapter} 章</span>}
+                        <button
+                          type="button"
+                          onClick={() => archiveMemory(m.id)}
+                          className="ml-auto inline-flex items-center gap-1 hover:text-studio-text"
+                        >
+                          <Archive className="h-3 w-3" />
+                          归档
+                        </button>
                       </div>
                       <p className="mt-2 text-sm leading-relaxed">{m.content}</p>
                     </li>
                   ))}
                 </ul>
+                {mergingSubject === c.subject ? (
+                  <div className="mt-4 space-y-2 rounded-lg border border-studio-border bg-studio-bg/60 p-3">
+                    <select
+                      value={mergeKeepID}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setMergeKeepID(id);
+                        const mem = c.memories.find((m) => m.id === id);
+                        if (mem) setMergeContent(mem.content);
+                      }}
+                      className="w-full rounded border border-studio-border bg-studio-panel px-2 py-1.5 text-sm"
+                    >
+                      <option value="">选择保留的记忆</option>
+                      {c.memories.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          [{m.category}] {m.content.slice(0, 36)}…
+                        </option>
+                      ))}
+                    </select>
+                    <textarea
+                      value={mergeContent}
+                      onChange={(e) => setMergeContent(e.target.value)}
+                      rows={3}
+                      className="w-full resize-none rounded border border-studio-border bg-studio-panel px-2 py-1.5 text-sm outline-none"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={saving || !mergeKeepID}
+                        onClick={() => mergeConflict(c.subject)}
+                        className="rounded-lg bg-studio-accent px-3 py-1.5 text-xs text-studio-on-accent disabled:opacity-40"
+                      >
+                        {saving ? "合并中…" : "合并并归档其余"}
+                      </button>
+                      <button type="button" onClick={() => setMergingSubject("")} className="text-xs text-studio-muted">
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMergingSubject(c.subject);
+                      setMergeKeepID(c.memories[0]?.id ?? "");
+                      setMergeContent(c.memories[0]?.content ?? "");
+                    }}
+                    className="mt-3 text-xs text-studio-accent hover:underline"
+                  >
+                    合并此组冲突
+                  </button>
+                )}
               </li>
             ))}
           </ul>
