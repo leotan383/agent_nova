@@ -33,7 +33,7 @@ flowchart TB
     Snap[ContextBuilder Snapshot]
     MemTable[(memories 表)]
     LLM[WriteAgent / ContextAgent]
-    Snap -->|Top-10 记忆| LLM
+    Snap -->|智能召回 Top-10| LLM
     MemTable --> Snap
   end
   subgraph sinkPath [写章后]
@@ -108,26 +108,27 @@ Go 结构体：`internal/store/sqlite.go` → `store.Memory`
 
 ### 3.1 写前注入（Read Path）
 
-**入口**：`internal/context/builder.go` → `Builder.Build`
+**入口**：`internal/context/builder.go` → `Builder.Build` + `internal/context/recall.go`
 
-组装 `Snapshot.Memories` 时：
+组装 `Snapshot.Memories` 时走 **智能召回**（Q1-A）：
 
-```go
-memories, _ := b.Store.QueryMemories("", "", 10)
-// 格式：[category/subject] content
-```
+| 阶段 | 能力 | 说明 |
+|------|------|------|
+| **A1 规则召回** | 章纲/摘要关键词 + 主角/金手指锚点 + entities 匹配 | 对 active 记忆打分排序 |
+| **A2 语义召回** | 章纲 + 近 3 章摘要 → embedding Top-K | 需 `OPENAI_API_KEY` 且执行过 `nova index embed`（含 memories） |
+| **A3 预算控制** | 记忆段上限约 2400 字 | Top-10 条，超出预算截断 |
+| **融合** | RRF（k=60） | 规则与语义双路命中加权 |
+| **回退** | 无命中时 | 按 `created_at DESC` 取最近 10 条（兼容旧行为） |
 
-| 参数 | 当前值 | 说明 |
-|------|--------|------|
-| category 过滤 | 空（全部分类） | 未做语义相关性排序 |
-| subject 过滤 | 空 | 未按本章关键词过滤 |
-| limit | **10** | Top-10，按 `created_at DESC` |
+FTS 检索同步增强：用章纲关键词 + 章号构造 `SearchFTS` 查询。
 
 注入路径：
 
 ```
-memories 表 → Snapshot.Memories → Snapshot.ToPrompt() → ContextAgent / WriteAgent
+memories 表 → RecallMemories → Snapshot.Memories + MemoryRecalls → ContextAgent / WriteAgent
 ```
+
+`MemoryRecalls[]` 含 `source`（rule/semantic/rrf/fallback）与 `reason`（选中理由），Desktop `WriteContextPanel` 可展示。
 
 在 `ToPrompt()` 中位于「长期记忆」段落，与卷纲、近章摘要、设定摘要、FTS 命中并列。
 
@@ -341,7 +342,10 @@ flowchart LR
 internal/
 ├── store/sqlite.go          # Memory 结构体、CRUD、UpsertMemory、FindMemoryConflicts
 ├── memory/bootstrap.go      # BootstrapFromSettings
-├── context/builder.go       # 写前 QueryMemories Top-10
+├── context/
+│   ├── builder.go       # 写前组装 Snapshot
+│   ├── recall.go        # 智能记忆召回（规则 + 语义 RRF）
+│   └── keywords.go      # 章纲关键词提取
 ├── workflows/
 │   ├── extract.go           # ExtractAndPersistFacts
 │   └── write.go             # LearnWorkflow、写章/审查调用链
@@ -387,8 +391,8 @@ nova write 6
 
 | 限制 | 说明 | 可能改进 |
 |------|------|----------|
-| 注入无相关性排序 | Top-10 仅按时间倒序 | 按本章关键词 / embedding 相似度排序 |
-| 未用向量检索记忆 | `embeddings` 表独立 | 对 memories.content 建 embedding |
+| ~~注入无相关性排序~~ | ✅ Q1-A 已实现规则 + 语义 RRF | 持续调优关键词与权重 |
+| ~~未用向量检索记忆~~ | ✅ `nova index embed` 已索引 memories | Upsert 时增量 embed |
 | 冲突只报告不修复 | `conflicts` 无 merge CLI | `memory reconcile` |
 | archived 未使用 | status 字段预留 | 归档旧记忆而非覆盖 |
 | 与 entities 可能重复 | 同事实两种存法 | 提取 prompt 划分更清晰 |

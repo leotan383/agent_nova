@@ -1,6 +1,7 @@
 package contextbuilder
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,14 +9,16 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/tanlian/agent_nova/internal/config"
 	"github.com/tanlian/agent_nova/internal/project"
 	"github.com/tanlian/agent_nova/internal/prompts"
 	"github.com/tanlian/agent_nova/internal/store"
 )
 
 type Builder struct {
-	Proj  *project.Project
-	Store *store.Store
+	Proj   *project.Project
+	Store  *store.Store
+	Config *config.Config // 可选；有 API Key 时启用语义召回
 }
 
 type Snapshot struct {
@@ -26,9 +29,10 @@ type Snapshot struct {
 	VolumeOutline   string `json:"volume_outline"`   // 卷纲全文（可能截断）
 	RecentSummary   string `json:"recent_summary"`
 	Settings        string `json:"settings"`
-	Memories        string `json:"memories"`
-	OpenForeshadows string `json:"open_foreshadows"`
-	FTSHits         string `json:"fts_hits"`
+	Memories        string            `json:"memories"`
+	MemoryRecalls   []MemoryRecallHit `json:"memory_recalls,omitempty"`
+	OpenForeshadows string            `json:"open_foreshadows"`
+	FTSHits         string            `json:"fts_hits"`
 }
 
 // Build 组装写章上下文快照。
@@ -63,14 +67,24 @@ func (b *Builder) Build(chapter, volume int) (*Snapshot, error) {
 	snap.OpenForeshadows = b.openForeshadows()
 
 	if b.Store != nil {
-		memories, _ := b.Store.QueryMemories("", "", 10)
-		var parts []string
-		for _, m := range memories {
-			parts = append(parts, fmt.Sprintf("[%s/%s] %s", m.Category, m.Subject, m.Content))
+		keywords := extractKeywords(
+			snap.ChapterOutline, snap.RecentSummary,
+			b.Proj.Meta.Protagonist, b.Proj.Meta.Cheat,
+		)
+		entityNames := relatedEntityNames(b.Store, keywords)
+		recalls := RecallMemories(context.Background(), b.Store, b.Config, RecallInput{
+			Chapter: chapter, Outline: snap.ChapterOutline, RecentSummary: snap.RecentSummary,
+			Keywords: keywords, EntityNames: entityNames,
+			Protagonist: b.Proj.Meta.Protagonist, Cheat: b.Proj.Meta.Cheat,
+		})
+		if len(recalls) == 0 {
+			recalls = fallbackRecentMemories(b.Store)
 		}
-		snap.Memories = strings.Join(parts, "\n")
+		snap.MemoryRecalls = recalls
+		snap.Memories = formatMemoryRecalls(recalls)
 
-		hits, _ := b.Store.SearchFTS(fmt.Sprintf("第%d", chapter), 5)
+		ftsQuery := buildFTSQuery(keywords, chapter)
+		hits, _ := b.Store.SearchFTS(ftsQuery, 5)
 		for _, h := range hits {
 			snap.FTSHits += fmt.Sprintf("%s: %s\n", h["kind"], h["snippet"])
 		}
@@ -272,4 +286,17 @@ func fallback(s, def string) string {
 		return s
 	}
 	return def
+}
+
+// fallbackRecentMemories 无关键词命中时回退为最近记忆（兼容旧行为）。
+func fallbackRecentMemories(st *store.Store) []MemoryRecallHit {
+	memories, _ := st.QueryMemories("", "", recallDefaultTopK)
+	out := make([]MemoryRecallHit, 0, len(memories))
+	for _, m := range memories {
+		out = append(out, MemoryRecallHit{
+			ID: m.ID, Category: m.Category, Subject: m.Subject, Content: m.Content,
+			Source: "fallback", Reason: "近期写入", Score: 0,
+		})
+	}
+	return applyMemoryBudget(out, recallMaxRunes)
 }

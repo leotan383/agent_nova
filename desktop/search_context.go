@@ -19,16 +19,28 @@ type SearchHitDTO struct {
 	WikiID  string `json:"wiki_id,omitempty"`
 }
 
+// MemoryRecallDTO 单条记忆召回（含选中理由）。
+type MemoryRecallDTO struct {
+	ID       string  `json:"id"`
+	Category string  `json:"category"`
+	Subject  string  `json:"subject"`
+	Content  string  `json:"content"`
+	Source   string  `json:"source"`
+	Reason   string  `json:"reason"`
+	Score    float64 `json:"score"`
+}
+
 // WriteContextDTO 写章上下文快照。
 type WriteContextDTO struct {
-	Chapter          int    `json:"chapter"`
-	Volume           int    `json:"volume"`
-	Outline          string `json:"outline"`
-	RecentSummary    string `json:"recent_summary"`
-	Settings         string `json:"settings"`
-	Memories         string `json:"memories"`
-	FTSHits          string `json:"fts_hits"`
-	OpenForeshadows  string `json:"open_foreshadows"`
+	Chapter          int               `json:"chapter"`
+	Volume           int               `json:"volume"`
+	Outline          string            `json:"outline"`
+	RecentSummary    string            `json:"recent_summary"`
+	Settings         string            `json:"settings"`
+	Memories         string            `json:"memories"`
+	MemoryRecalls    []MemoryRecallDTO `json:"memory_recalls"`
+	FTSHits          string            `json:"fts_hits"`
+	OpenForeshadows  string            `json:"open_foreshadows"`
 }
 
 func toSearchHits(hits []search.Hit) []SearchHitDTO {
@@ -78,16 +90,23 @@ func (a *App) GetWriteContext(chapter, volume int) (WriteContextDTO, error) {
 	}
 	var result WriteContextDTO
 	err = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
-		cb := contextbuilder.Builder{Proj: actx.Project, Store: actx.Store}
+		cb := contextbuilder.Builder{Proj: actx.Project, Store: actx.Store, Config: actx.Config}
 		snap, err := cb.Build(chapter, volume)
 		if err != nil {
 			return err
+		}
+		recalls := make([]MemoryRecallDTO, len(snap.MemoryRecalls))
+		for i, r := range snap.MemoryRecalls {
+			recalls[i] = MemoryRecallDTO{
+				ID: r.ID, Category: r.Category, Subject: r.Subject, Content: r.Content,
+				Source: r.Source, Reason: r.Reason, Score: r.Score,
+			}
 		}
 		result = WriteContextDTO{
 			Chapter: snap.Chapter, Volume: snap.Volume,
 			Outline:    firstNonEmpty(snap.ChapterOutline, snap.VolumeOutline),
 			RecentSummary: snap.RecentSummary, Settings: snap.Settings,
-			Memories: snap.Memories, FTSHits: snap.FTSHits,
+			Memories: snap.Memories, MemoryRecalls: recalls, FTSHits: snap.FTSHits,
 			OpenForeshadows: snap.OpenForeshadows,
 		}
 		return nil

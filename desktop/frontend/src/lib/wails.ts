@@ -401,6 +401,16 @@ export interface SearchHitDTO {
   wiki_id?: string;
 }
 
+export interface MemoryRecallDTO {
+  id: string;
+  category: string;
+  subject: string;
+  content: string;
+  source: string;
+  reason: string;
+  score: number;
+}
+
 export interface WriteContextDTO {
   chapter: number;
   volume: number;
@@ -408,6 +418,7 @@ export interface WriteContextDTO {
   recent_summary: string;
   settings: string;
   memories: string;
+  memory_recalls: MemoryRecallDTO[];
   fts_hits: string;
   open_foreshadows: string;
 }

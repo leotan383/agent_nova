@@ -31,6 +31,48 @@ function Section({ title, body, defaultOpen = false }: { title: string; body: st
   );
 }
 
+const sourceLabels: Record<string, string> = {
+  rule: "规则",
+  semantic: "语义",
+  rrf: "融合",
+  fallback: "近期",
+};
+
+function MemoryRecallSection({ recalls }: { recalls: WriteContextDTO["memory_recalls"] }) {
+  const [open, setOpen] = useState(true);
+  if (!recalls?.length) return null;
+  return (
+    <div className="border-b border-studio-border/60 last:border-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-medium text-studio-muted hover:bg-studio-bg hover:text-studio-text"
+      >
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        长期记忆（{recalls.length} 条召回）
+      </button>
+      {open && (
+        <div className="max-h-44 space-y-2 overflow-y-auto border-t border-studio-border/40 px-3 py-2">
+          {recalls.map((r) => (
+            <div key={r.id} className="rounded-lg border border-studio-border/50 bg-studio-bg/40 px-2.5 py-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-medium text-studio-text">
+                  [{r.category}/{r.subject}]
+                </span>
+                <span className="rounded bg-studio-panel px-1.5 py-0.5 text-[9px] text-studio-muted">
+                  {sourceLabels[r.source] ?? r.source}
+                </span>
+              </div>
+              <p className="mt-1 text-[10px] text-studio-muted">{r.reason}</p>
+              <p className="mt-1 line-clamp-3 text-[11px] text-studio-text/85">{r.content}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function WriteContextPanel({ chapter, volume, defaultCollapsed = true }: Props) {
   const [ctx, setCtx] = useState<WriteContextDTO | null>(null);
   const [loading, setLoading] = useState(false);
@@ -111,7 +153,10 @@ export default function WriteContextPanel({ chapter, volume, defaultCollapsed = 
           <Section title="卷纲 / 章纲" body={ctx?.outline ?? ""} defaultOpen />
           <Section title="近章摘要" body={ctx?.recent_summary ?? ""} />
           <Section title="设定摘要" body={ctx?.settings ?? ""} />
-          <Section title="长期记忆" body={ctx?.memories ?? ""} />
+          <MemoryRecallSection recalls={ctx?.memory_recalls ?? []} />
+          {!ctx?.memory_recalls?.length && (
+            <Section title="长期记忆" body={ctx?.memories ?? ""} />
+          )}
           <Section title="Open 伏笔" body={ctx?.open_foreshadows ?? ""} />
           <Section title="检索命中" body={ctx?.fts_hits ?? ""} />
         </div>

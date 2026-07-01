@@ -52,5 +52,19 @@ func (idx *Indexer) RebuildEmbeddings(ctx context.Context, cfg *config.Config) (
 		count++
 		return nil
 	})
-	return count, err
+	if err != nil {
+		return count, err
+	}
+	memories, err := idx.store.ListActiveMemories(5000)
+	if err != nil {
+		return count, err
+	}
+	for _, m := range memories {
+		text := m.Subject + "\n" + m.Content
+		if err := ragIdx.IndexText(ctx, idx.store, "memory", m.ID, text); err != nil {
+			return count, err
+		}
+		count++
+	}
+	return count, nil
 }

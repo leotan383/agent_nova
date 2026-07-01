@@ -31,7 +31,7 @@ var contextExtractCmd = &cobra.Command{
 			return err
 		}
 		defer actx.Close()
-		cb := contextbuilder.Builder{Proj: actx.Project, Store: actx.Store}
+		cb := contextbuilder.Builder{Proj: actx.Project, Store: actx.Store, Config: actx.Config}
 		snap, err := cb.Build(ctxChapter, ctxVolume)
 		if err != nil {
 			return err

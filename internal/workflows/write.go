@@ -22,13 +22,17 @@ import (
 )
 
 type WriteWorkflow struct {
-	Agent *agent.Agent
+	Agent  *agent.Agent
+	Config *config.Config
 }
 
 func NewWriteWorkflow(cfg *config.Config, p *project.Project, st *store.Store) *WriteWorkflow {
 	reg := tools.NewRegistry()
 	reg.BindProject(p.Root, st)
-	return &WriteWorkflow{Agent: agent.New(agent.Options{Config: cfg, Registry: reg})}
+	return &WriteWorkflow{
+		Agent:  agent.New(agent.Options{Config: cfg, Registry: reg}),
+		Config: cfg,
+	}
 }
 
 type WriteOptions struct {
@@ -76,7 +80,7 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 
 	// 组装写章上下文：近章摘要、设定、卷纲、记忆、FTS 命中
 	emit("context", "组装写作上下文")
-	cb := contextbuilder.Builder{Proj: p, Store: st}
+	cb := contextbuilder.Builder{Proj: p, Store: st, Config: w.Config}
 	snap, err := cb.Build(opts.Chapter, opts.Volume)
 	if err != nil {
 		return nil, err

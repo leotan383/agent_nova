@@ -381,28 +381,26 @@ gantt
 
 目标：**把「记忆系统」从「有设计」变成「真的管用」**，并补齐 Desktop 关键缺口。
 
-#### Q1-A：智能记忆召回（P0 级，最高优先）
+#### Q1-A：智能记忆召回（P0 级，最高优先）— ✅ 已完成（2026-07-01）
 
-**现状**：`ContextBuilder.Build` 固定 `QueryMemories("", "", 10)` 按时间取最新 10 条；embedding 已有 `SearchEmbeddings` 但未接入写章上下文。
+**现状**：~~`ContextBuilder.Build` 固定 `QueryMemories("", "", 10)` 按时间取最新 10 条~~ → 已实现规则 + 语义 RRF 召回。
 
 **目标**：写第 N 章时，注入的是 **与本章相关** 的记忆，而不是「最近 10 条杂项」。
 
 **实现路径（分三期，可在 Q1 内迭代交付）**：
 
-| 阶段 | 能力 | 技术要点 |
-|------|------|----------|
-| **A1** | 规则召回 | 从章纲提取实体名/关键词 → FTS memories + 开放 foreshadows + 相关 entities |
-| **A2** | 语义召回 | 用章纲 + 近 3 章摘要做 query → `SearchEmbeddings` Top-K；与 A1 做 RRF 融合 |
-| **A3** | 预算控制 | 总 context token 上限；优先级：章纲 > 摘要 > 相关记忆 > 通用设定 |
+| 阶段 | 能力 | 状态 | 技术要点 |
+|------|------|------|----------|
+| **A1** | 规则召回 | ✅ | `internal/context/recall.go`：章纲关键词 + entities + 主角锚点打分 |
+| **A2** | 语义召回 | ✅ | 章纲 + 近 3 章摘要 → `SearchEmbeddings`；`nova index embed` 已索引 memories |
+| **A3** | 预算控制 | ✅ | 记忆段 ~2400 字上限；Top-10；RRF k=60 |
 
-**涉及文件**：`internal/context/builder.go`、`internal/rag/rag.go`、`internal/workflows/write.go`、Desktop `WriteContextPanel`
-
-**工作量**：M（4–6 周）
+**涉及文件**：`internal/context/recall.go`、`builder.go`、`internal/index/embeddings.go`、`desktop/search_context.go`、`WriteContextPanel.tsx`
 
 **成功标准**：
 
-- 写第 50 章时，注入记忆里 **≥70%** 与章纲关键词/实体相关（人工抽检 20 章）
-- WriteContextPanel 可看到「为何选中这条记忆」
+- ✅ WriteContextPanel 可看到「为何选中这条记忆」（source + reason）
+- 写第 50 章时 ≥70% 记忆与章纲相关（需人工抽检，持续调优权重）
 
 #### Q1-B：一致性仪表盘（P0 级）
 
