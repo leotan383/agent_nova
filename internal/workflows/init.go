@@ -95,17 +95,19 @@ func (w *InitWorkflow) writeSplitFiles(root, content string) {
 
 type PlanWorkflow struct {
 	Agent *agent.Agent
+	store *store.Store
 }
 
 func NewPlanWorkflow(cfg *config.Config, p *project.Project, st *store.Store) *PlanWorkflow {
 	reg := tools.NewRegistry()
-	reg.BindProject(p.Root, st)
-	return &PlanWorkflow{Agent: agent.New(agent.Options{Config: cfg, Registry: reg})}
+	reg.BindProjectPlan(p.Root, st)
+	return &PlanWorkflow{Agent: agent.New(agent.Options{Config: cfg, Registry: reg}), store: st}
 }
 
 func (w *PlanWorkflow) PlanVolume(ctx context.Context, p *project.Project, vol int) (*report.Report, error) {
 	master, _ := os.ReadFile(fmt.Sprintf("%s/大纲/总纲.md", p.Root))
 	settings := readDirConcat(p.SettingsDir())
+	extra := planVolumeContext(p, w.store, vol)
 	userPrompt := fmt.Sprintf(`请为第 %d 卷生成详细卷纲 Markdown。
 每章格式：
 ### 第N章 · 标题
@@ -113,11 +115,14 @@ func (w *PlanWorkflow) PlanVolume(ctx context.Context, p *project.Project, vol i
 - 爽点：
 - 伏笔：
 
+下文已附总纲、设定与已写摘要/状态，请优先直接使用。仅在明显缺信息时调用只读工具补充，不要用 write_file。
+收集足够信息后，必须在本轮直接输出完整 Markdown 正文（不要只调工具不输出）。
+
 总纲：
 %s
 
 设定摘要：
-%s`, vol, string(master), settings)
+%s%s`, vol, string(master), settings, extra)
 	content, err := w.Agent.Run(ctx, agent.RunInput{
 		SystemPrompt: prompts.PlanSystem(prompts.BookContext{
 			Title: p.Meta.Title, Genre: p.Meta.Genre, Style: p.Meta.WritingStyle(),
@@ -126,6 +131,7 @@ func (w *PlanWorkflow) PlanVolume(ctx context.Context, p *project.Project, vol i
 		}),
 		UserPrompt:   userPrompt,
 		Tools:        true,
+		MaxToolLoops: 14,
 	})
 	if err != nil {
 		return nil, err
@@ -147,6 +153,31 @@ func (w *PlanWorkflow) PlanVolume(ctx context.Context, p *project.Project, vol i
 		Artifacts: []string{path},
 		NextSteps: []string{fmt.Sprintf("nova write %d", (vol-1)*30+1), "nova plan show " + fmt.Sprint(vol)},
 	}, nil
+}
+
+func planVolumeContext(p *project.Project, st *store.Store, vol int) string {
+	var b strings.Builder
+	if vol > 1 {
+		if prev, err := os.ReadFile(p.VolumeOutlinePath(vol - 1)); err == nil && len(prev) > 0 {
+			fmt.Fprintf(&b, "\n\n## 上一卷卷纲（第 %d 卷）\n%s", vol-1, strings.TrimSpace(string(prev)))
+		}
+	}
+	written := p.Meta.CurrentChapter
+	if written <= 0 {
+		return b.String()
+	}
+	if summaries := collectWrittenSummaries(p, written, 12000); summaries != "" {
+		fmt.Fprintf(&b, "\n\n## 已写章节摘要（第 1–%d 章）\n%s", written, summaries)
+	}
+	if st != nil {
+		if entities := formatEntities(st, 50); entities != "" {
+			fmt.Fprintf(&b, "\n\n## 实体状态\n%s", entities)
+		}
+		if fs := formatOpenForeshadows(st); fs != "" {
+			fmt.Fprintf(&b, "\n\n## 开放伏笔\n%s", fs)
+		}
+	}
+	return b.String()
 }
 
 func readDirConcat(dir string) string {

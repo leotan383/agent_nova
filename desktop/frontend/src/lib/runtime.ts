@@ -15,6 +15,8 @@ export type WriteEventPayload = {
   batch_index?: number;
   total_in_batch?: number;
   elapsed_ms?: number;
+  chapters_processed?: number;
+  skipped?: string[];
 };
 
 type WailsRuntime = {
@@ -87,4 +89,10 @@ export const AI_DETECT_EVENTS = {
   status: "ai_detect:status",
   done: "ai_detect:done",
   error: "ai_detect:error",
+} as const;
+
+export const ENTITY_HISTORY_EVENTS = {
+  status: "entity_history:status",
+  done: "entity_history:done",
+  error: "entity_history:error",
 } as const;

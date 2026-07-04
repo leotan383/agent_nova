@@ -7,6 +7,33 @@ export type ReviewMetrics = {
   issues: string[];
 };
 
+/** 将审查 JSON 中的 issue 条目统一为展示用字符串（兼容对象格式）。 */
+export function normalizeReviewIssue(item: unknown): string {
+  if (typeof item === "string") return item.trim();
+  if (!item || typeof item !== "object") return String(item ?? "");
+  const o = item as Record<string, unknown>;
+  const position = o.position ?? o["位置"];
+  const problem = o.problem ?? o["问题"];
+  const suggestion = o.suggestion ?? o["建议"];
+  const parts: string[] = [];
+  if (position != null && String(position).trim()) parts.push(String(position).trim());
+  if (problem != null && String(problem).trim()) parts.push(String(problem).trim());
+  if (suggestion != null && String(suggestion).trim()) {
+    parts.push(`建议：${String(suggestion).trim()}`);
+  }
+  if (parts.length > 0) return parts.join(" · ");
+  try {
+    return JSON.stringify(item);
+  } catch {
+    return String(item);
+  }
+}
+
+function normalizeReviewIssues(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(normalizeReviewIssue).filter((s) => s.length > 0);
+}
+
 /** 从审查 Markdown 末尾 JSON 块解析指标（数据库无记录时的兜底） */
 export function parseReviewMetricsFromText(content: string): ReviewMetrics | null {
   let s = content.trim();
@@ -27,13 +54,13 @@ export function parseReviewMetricsFromText(content: string): ReviewMetrics | nul
       hook_score?: number;
       cool_point?: string;
       debt?: string;
-      issues?: string[];
+      issues?: unknown[];
     };
     return {
       hookScore: typeof parsed.hook_score === "number" ? parsed.hook_score : null,
       coolPoint: parsed.cool_point ?? "",
       debt: parsed.debt ?? "",
-      issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+      issues: normalizeReviewIssues(parsed.issues),
     };
   } catch {
     return null;
@@ -46,7 +73,7 @@ export function metricsFromDTO(dto: ChapterReviewMetricsDTO | null): ReviewMetri
     hookScore: dto.hook_score,
     coolPoint: dto.cool_point ?? "",
     debt: dto.debt ?? "",
-    issues: dto.issues ?? [],
+    issues: normalizeReviewIssues(dto.issues),
   };
 }
 

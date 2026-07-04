@@ -55,6 +55,7 @@ type RunInput struct {
 	SystemPrompt string
 	UserPrompt   string
 	Tools        bool
+	MaxToolLoops int // 0 表示使用默认上限
 	Stream       bool
 	OnDelta      func(string) error
 	UsageAcc     *UsageAccumulator
@@ -72,7 +73,11 @@ func (a *Agent) Run(ctx context.Context, in RunInput) (string, error) {
 	if in.Stream && len(toolDefs) == 0 {
 		return a.runStream(ctx, messages, in.OnDelta, in.UsageAcc)
 	}
-	for i := 0; i < maxToolLoops; i++ {
+	limit := maxToolLoops
+	if in.MaxToolLoops > 0 {
+		limit = in.MaxToolLoops
+	}
+	for i := 0; i < limit; i++ {
 		logger.Debug("agent round=%d messages=%d tools=%d", i+1, len(messages), len(toolDefs))
 		resp, err := a.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 			Model:    a.model,

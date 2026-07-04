@@ -84,6 +84,8 @@ func PlanSystem(anchor BookContext) string {
 %s
 
 输出要求（Markdown）：
+- 优先使用提示词中已附上下文；仅在明显不足时调用只读工具补充
+- 收集足够信息后必须直接输出完整卷纲 Markdown（不要只用工具、不写正文；不要用 write_file）
 - 每章包含：章号、标题、核心冲突、爽点（micro/medium）、伏笔（埋/收，注明 id）
 - 章纲要可执行：写手可据此直接动笔，不写「待定」「略」
 - 节奏符合网文连载：3-5 章一个小高潮，卷末留大钩子
@@ -149,8 +151,8 @@ func ReviewSystem(anchor BookContext) string {
 3. **润色版正文**（在「## 润色版正文」下直接以「# 第N章 标题」开头输出完整正文；不要写修改说明、润色说明、前言、分隔线或修改对照表）
 
 审查时重点对照：章纲任务、设定锚点、近章已发生事实。
-JSON 块（放在报告末尾）：
-{"hook_score":0-10,"cool_point":"","debt":"","issues":[]}`, BookAnchor(anchor))
+JSON 块（放在报告末尾，issues 为字符串数组，每条格式「【修正】位置 + 问题 + 建议」）：
+{"hook_score":0-10,"cool_point":"","debt":"","issues":["【修正】第3段：…"]}`, BookAnchor(anchor))
 }
 
 func AIDetectSystem() string {
@@ -222,7 +224,8 @@ func ExtractSystem() string {
 - entity.name 使用规范称呼：同一人物/地点/物品只输出一个 name，不要加「（未具名）」「（影像）」等括号变体；状态细节写在 state 里
 - foreshadow.action=resolve 时 status=resolved
 - 已回收伏笔 id 应与已有 open 伏笔一致（若文本能判断）
-- cool_points.delivered 表示本章是否兑现该爽点`
+- cool_points.delivered 表示本章是否兑现该爽点
+- 输出必须是可被 json.Unmarshal 解析的严格 JSON：双引号、无注释、无尾随逗号、无多余文字`
 }
 
 func DiscoverSystem() string {

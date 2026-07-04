@@ -29,6 +29,7 @@ type App struct {
 	write     writeManager
 	plan      planManager
 	review    reviewManager
+	entityHistoryBackfill entityHistoryBackfillManager
 	aiDetect  aiDetectManager
 	coach     coachManager
 	revise    reviseManager
@@ -42,6 +43,7 @@ func NewApp() *App {
 	a.write = *newWriteManager(a)
 	a.plan = *newPlanManager(a)
 	a.review = *newReviewManager(a)
+	a.entityHistoryBackfill = *newEntityHistoryBackfillManager(a)
 	a.aiDetect = *newAIDetectManager(a)
 	a.coach = *newCoachManager(a)
 	a.revise = *newReviseManager(a)

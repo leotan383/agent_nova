@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Boxes, Clock, MapPin, Package, User } from "lucide-react";
 import { EntityDTO, EntityStateSnapshotDTO, app } from "../lib/wails";
+import { ENTITY_HISTORY_EVENTS, eventsOn } from "../lib/runtime";
 import EntityTimeline from "./EntityTimeline";
 
 const typeMeta: Record<
@@ -50,12 +51,74 @@ export default function EntityDetailView({ entity }: { entity: EntityDTO }) {
   const [history, setHistory] = useState<EntityStateSnapshotDTO[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [backfillRunning, setBackfillRunning] = useState(false);
+  const [backfillMessage, setBackfillMessage] = useState("");
+  const [backfillError, setBackfillError] = useState("");
+
+  const loadHistory = useCallback(() => {
+    setHistoryLoading(true);
+    setHistoryError("");
+    return app()
+      .GetEntityHistory(entity.id)
+      .then((list) => setHistory(list))
+      .catch((e) => setHistoryError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setHistoryLoading(false));
+  }, [entity.id]);
+
+  const needsBackfill = useMemo(() => {
+    if (entity.last_chapter <= 1) return false;
+    if (history.length === 0) return true;
+    if (history.length === 1) return true;
+    const firstChapter = history[0]?.chapter ?? 0;
+    return firstChapter > 1;
+  }, [entity.last_chapter, history]);
 
   useEffect(() => {
     setView("current");
     setHistory([]);
     setHistoryError("");
+    setBackfillError("");
+    setBackfillMessage("");
   }, [entity.id]);
+
+  useEffect(() => {
+    app()
+      .GetActiveEntityHistoryBackfillJob()
+      .then((active) => {
+        if (active.active) {
+          setBackfillRunning(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const offStatus = eventsOn(ENTITY_HISTORY_EVENTS.status, (payload) => {
+      setBackfillRunning(payload.status === "running" || payload.status === "pending");
+      if (payload.message) setBackfillMessage(payload.message);
+    });
+    const offDone = eventsOn(ENTITY_HISTORY_EVENTS.done, (payload) => {
+      setBackfillRunning(false);
+      const skipped = payload.skipped ?? [];
+      if (skipped.length > 0) {
+        setBackfillMessage(`回溯完成，${skipped.length} 章跳过`);
+        setBackfillError(skipped.join("；"));
+      } else {
+        setBackfillMessage("回溯完成");
+        setBackfillError("");
+      }
+      if (view === "timeline") void loadHistory();
+    });
+    const offError = eventsOn(ENTITY_HISTORY_EVENTS.error, (payload) => {
+      setBackfillRunning(false);
+      setBackfillError(payload.error ?? "回溯失败");
+    });
+    return () => {
+      offStatus();
+      offDone();
+      offError();
+    };
+  }, [view, loadHistory]);
 
   useEffect(() => {
     if (view !== "timeline") return;
@@ -77,6 +140,18 @@ export default function EntityDetailView({ entity }: { entity: EntityDTO }) {
       cancelled = true;
     };
   }, [view, entity.id]);
+
+  const handleBackfill = useCallback(() => {
+    setBackfillError("");
+    setBackfillMessage("准备回溯…");
+    app()
+      .StartEntityHistoryBackfill()
+      .then(() => setBackfillRunning(true))
+      .catch((e) => {
+        setBackfillRunning(false);
+        setBackfillError(e instanceof Error ? e.message : String(e));
+      });
+  }, []);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -157,7 +232,17 @@ export default function EntityDetailView({ entity }: { entity: EntityDTO }) {
             {historyError && (
               <div className="mb-4 studio-alert-error-compact">{historyError}</div>
             )}
-            <EntityTimeline snapshots={history} loading={historyLoading} accentClass={meta.accent} />
+            <EntityTimeline
+              snapshots={history}
+              loading={historyLoading}
+              accentClass={meta.accent}
+              lastChapter={entity.last_chapter}
+              needsBackfill={needsBackfill}
+              backfillRunning={backfillRunning}
+              backfillMessage={backfillMessage}
+              backfillError={backfillError}
+              onBackfill={handleBackfill}
+            />
           </>
         )}
       </div>

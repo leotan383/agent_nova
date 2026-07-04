@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, GitBranch, Sparkles, Target, Zap } from "lucide-react";
-import { ReviewMetrics } from "../lib/reviewMetrics";
+import { ReviewMetrics, normalizeReviewIssue } from "../lib/reviewMetrics";
 
 function issueKind(text: string): "fix" | "strengthen" | "other" {
   if (text.includes("【修正】") || text.includes("[修正]")) return "fix";
@@ -157,6 +157,10 @@ export default function ReviewSummaryPanel({
   );
 }
 
+function formatIssueText(item: unknown): string {
+  return normalizeReviewIssue(item);
+}
+
 function IssueGroup({
   title,
   tone,
@@ -182,7 +186,7 @@ function IssueGroup({
             key={i}
             className={`rounded-md border px-2.5 py-1.5 text-xs leading-relaxed text-studio-text ${toneClass}`}
           >
-            {item.replace(/^【(?:修正|加强)】/, "").trim() || item}
+            {formatIssueText(item).replace(/^【(?:修正|加强)】/, "").trim() || formatIssueText(item)}
           </li>
         ))}
       </ul>

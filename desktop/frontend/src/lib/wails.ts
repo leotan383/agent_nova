@@ -488,6 +488,16 @@ export interface EntityStateSnapshotDTO {
   is_current: boolean;
 }
 
+export interface EntityHistoryBackfillJobInfo {
+  id: string;
+  status: string;
+}
+
+export interface ActiveEntityHistoryBackfillJobDTO {
+  active: boolean;
+  job: EntityHistoryBackfillJobInfo;
+}
+
 export interface AppConfigDTO {
   model: string;
   base_url: string;
@@ -687,6 +697,8 @@ interface AppBindings {
   GetWriteGate(chapter: number, volume: number): Promise<WriteGateDTO>;
   ListEntities(entityType: string): Promise<EntityDTO[]>;
   GetEntityHistory(entityID: string): Promise<EntityStateSnapshotDTO[]>;
+  StartEntityHistoryBackfill(): Promise<EntityHistoryBackfillJobInfo>;
+  GetActiveEntityHistoryBackfillJob(): Promise<ActiveEntityHistoryBackfillJobDTO>;
   MergeEntityDuplicates(): Promise<number>;
   GetAppConfig(): Promise<AppConfigDTO>;
   SaveAppConfig(input: SaveAppConfigInput): Promise<void>;

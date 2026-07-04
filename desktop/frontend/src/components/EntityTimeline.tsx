@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { History, Loader2 } from "lucide-react";
 import { EntityStateSnapshotDTO } from "../lib/wails";
 
 function skipField(key: string) {
@@ -29,9 +29,25 @@ type Props = {
   snapshots: EntityStateSnapshotDTO[];
   loading: boolean;
   accentClass: string;
+  lastChapter: number;
+  needsBackfill: boolean;
+  backfillRunning: boolean;
+  backfillMessage: string;
+  backfillError: string;
+  onBackfill: () => void;
 };
 
-export default function EntityTimeline({ snapshots, loading, accentClass }: Props) {
+export default function EntityTimeline({
+  snapshots,
+  loading,
+  accentClass,
+  lastChapter,
+  needsBackfill,
+  backfillRunning,
+  backfillMessage,
+  backfillError,
+  onBackfill,
+}: Props) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16 text-studio-muted">
@@ -45,14 +61,35 @@ export default function EntityTimeline({ snapshots, loading, accentClass }: Prop
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <p className="text-sm text-studio-muted">暂无历史记录</p>
         <p className="mt-1 max-w-sm text-xs leading-relaxed text-studio-muted/70">
-          从下一章写章审查起，每次 AI 提取都会在此追加一条快照。已有角色会显示最近一次的状态。
+          从下一章写章审查起，每次 AI 提取都会在此追加一条快照。
         </p>
+        {lastChapter > 0 && (
+          <BackfillBanner
+            needsBackfill
+            backfillRunning={backfillRunning}
+            backfillMessage={backfillMessage}
+            backfillError={backfillError}
+            onBackfill={onBackfill}
+            className="mt-6 max-w-md"
+          />
+        )}
       </div>
     );
   }
 
   return (
     <div className="relative mx-auto max-w-2xl py-2">
+      {needsBackfill && (
+        <BackfillBanner
+          needsBackfill={needsBackfill}
+          backfillRunning={backfillRunning}
+          backfillMessage={backfillMessage}
+          backfillError={backfillError}
+          onBackfill={onBackfill}
+          className="mb-6"
+        />
+      )}
+
       <div
         className="absolute bottom-4 left-[1.125rem] top-4 w-px bg-gradient-to-b from-transparent via-studio-border to-transparent"
         aria-hidden
@@ -148,6 +185,63 @@ export default function EntityTimeline({ snapshots, loading, accentClass }: Prop
           );
         })}
       </ol>
+    </div>
+  );
+}
+
+function BackfillBanner({
+  needsBackfill,
+  backfillRunning,
+  backfillMessage,
+  backfillError,
+  onBackfill,
+  className = "",
+}: {
+  needsBackfill: boolean;
+  backfillRunning: boolean;
+  backfillMessage: string;
+  backfillError: string;
+  onBackfill: () => void;
+  className?: string;
+}) {
+  if (!needsBackfill && !backfillRunning && !backfillError) {
+    return null;
+  }
+
+  return (
+    <div
+      className={`rounded-xl border border-studio-border/80 bg-studio-panel/60 px-4 py-3 text-left ${className}`}
+    >
+      <p className="text-sm text-studio-text">早期章节的状态尚未记录</p>
+      <p className="mt-1 text-xs leading-relaxed text-studio-muted">
+        状态时间线是在近期功能上线后才开始逐章保存的，因此只显示最新一次审查的快照。可从已写章节重新提取，补齐各章状态（会调用
+        AI，按章节数计费）。
+      </p>
+      {backfillMessage && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-studio-muted">
+          {backfillRunning && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
+          {backfillMessage}
+        </p>
+      )}
+      {backfillError && <p className="mt-2 text-xs text-red-500">{backfillError}</p>}
+      <button
+        type="button"
+        disabled={backfillRunning}
+        onClick={onBackfill}
+        className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-studio-accent/15 px-3 py-1.5 text-xs font-medium text-studio-accent transition hover:bg-studio-accent/25 disabled:opacity-50"
+      >
+        {backfillRunning ? (
+          <>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            回溯中…
+          </>
+        ) : (
+          <>
+            <History className="h-3.5 w-3.5" />
+            从历史章节回溯填充
+          </>
+        )}
+      </button>
     </div>
   );
 }

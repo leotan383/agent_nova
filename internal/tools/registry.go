@@ -80,6 +80,46 @@ func (r *Registry) BindProject(root string, st *store.Store) {
 	}
 }
 
+// BindProjectPlan 绑定规划任务可用的只读工具（不含 write_file / update_memory）。
+func (r *Registry) BindProjectPlan(root string, st *store.Store) {
+	r.root = root
+	r.store = st
+	r.tools = map[string]func([]byte) (string, error){
+		"read_file":           r.readFile,
+		"search_project":      r.searchProject,
+		"query_entity":        r.queryEntity,
+		"query_foreshadow":    r.queryForeshadow,
+		"get_chapter_outline": r.getChapterOutline,
+		"list_chapters":       r.listChapters,
+	}
+	r.defs = []openai.Tool{
+		toolDef("read_file", "读取项目内相对路径文件", map[string]any{
+			"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}},
+			"required": []string{"path"},
+		}),
+		toolDef("search_project", "FTS 检索章节和设定", map[string]any{
+			"type": "object", "properties": map[string]any{
+				"query": map[string]any{"type": "string"},
+				"limit": map[string]any{"type": "integer"},
+			}, "required": []string{"query"},
+		}),
+		toolDef("query_entity", "查询实体（角色/地点/物品）", map[string]any{
+			"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}},
+			"required": []string{"query"},
+		}),
+		toolDef("query_foreshadow", "查询伏笔", map[string]any{
+			"type": "object", "properties": map[string]any{"status": map[string]any{"type": "string"}},
+		}),
+		toolDef("get_chapter_outline", "读取章纲（从卷纲文件）", map[string]any{
+			"type": "object", "properties": map[string]any{
+				"chapter": map[string]any{"type": "integer"},
+				"volume":  map[string]any{"type": "integer"},
+			}, "required": []string{"chapter"},
+		}),
+		toolDef("list_chapters", "列出已写章节", map[string]any{"type": "object", "properties": map[string]any{}}),
+	}
+}
+
 func toolDef(name, desc string, params map[string]any) openai.Tool {
 	return openai.Tool{
 		Type: openai.ToolTypeFunction,

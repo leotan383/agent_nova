@@ -498,12 +498,14 @@ export default function StudioPage() {
     </div>
   );
 
-  const renderSection = (title: string, items: NavItem[]) => (
-    <div key={title}>
+  const renderStateSection = () => (
+    <div>
       <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-studio-muted">
-        {title}
+        状态
       </p>
-      <nav className="space-y-0.5">{items.map((item) => renderNavButton(item))}</nav>
+      <nav className="space-y-0.5">
+        {metaNav.map((item) => renderNavButton(item))}
+      </nav>
     </div>
   );
 
@@ -656,12 +658,12 @@ export default function StudioPage() {
                     </button>
                   );
                 })}
-                {metaNav.map((item) => renderNavButton(item))}
               </nav>
             </div>
+            {renderStateSection()}
           </div>
           <p className="mt-6 px-3 text-[11px] leading-relaxed text-studio-muted/80">
-            创作：概览、大纲与正文；设定：角色、背景等分类与记忆。
+            创作：概览、大纲与正文；设定：角色、背景等分类；状态：记忆与一致性。
           </p>
         </aside>
 
