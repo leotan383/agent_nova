@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -130,72 +129,18 @@ func (p *Project) RunLedgerPath() string { return filepath.Join(p.NovaDir(), "ru
 func (p *Project) SettingsDir() string { return filepath.Join(p.Root, "设定集") }
 func (p *Project) OutlineDir() string  { return filepath.Join(p.Root, "大纲") }
 func (p *Project) ChaptersDir() string { return filepath.Join(p.Root, "正文") }
-func (p *Project) ReviewsDir() string  { return filepath.Join(p.Root, "审查") }
-func (p *Project) SummariesDir() string { return filepath.Join(p.Root, "摘要") }
 
 func (p *Project) VolumeOutlinePath(vol int) string {
 	return filepath.Join(p.OutlineDir(), fmt.Sprintf("第%02d卷.md", vol))
 }
 
 func ChapterFileName(num int, title string) string {
-	if title == "" {
-		return fmt.Sprintf("第%03d章.md", num)
-	}
-	return fmt.Sprintf("第%03d章-%s.md", num, sanitizeTitle(title))
-}
-
-func (p *Project) ChapterPath(num int, title string) string {
-	return filepath.Join(p.ChaptersDir(), ChapterFileName(num, title))
-}
-
-func (p *Project) ReviewPath(num int) string {
-	return filepath.Join(p.ReviewsDir(), fmt.Sprintf("第%03d章.review.md", num))
-}
-
-func (p *Project) SummaryPath(num int) string {
-	return filepath.Join(p.SummariesDir(), fmt.Sprintf("第%03d章.summary.md", num))
+	return ChapterDirName(num, title)
 }
 
 func sanitizeTitle(s string) string {
 	replacer := strings.NewReplacer("/", "-", "\\", "-", ":", "-", "*", "-", "?", "-", "\"", "-", "<", "-", ">", "-", "|", "-")
 	return replacer.Replace(strings.TrimSpace(s))
-}
-
-// FindChapterFile 在正文目录中查找章节文件（同章多文件时取最新/最大）。
-func (p *Project) FindChapterFile(number int) (path, title string, err error) {
-	entries, err := os.ReadDir(p.ChaptersDir())
-	if err != nil {
-		return "", "", err
-	}
-	prefix := fmt.Sprintf("第%03d", number)
-	var bestPath string
-	var bestSize int64
-	var bestMod time.Time
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), prefix) {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		full := filepath.Join(p.ChaptersDir(), e.Name())
-		if bestPath == "" || info.ModTime().After(bestMod) ||
-			(info.ModTime().Equal(bestMod) && info.Size() > bestSize) {
-			bestPath = full
-			bestSize = info.Size()
-			bestMod = info.ModTime()
-		}
-	}
-	if bestPath == "" {
-		return "", "", fmt.Errorf("第 %d 章正文不存在", number)
-	}
-	base := filepath.Base(bestPath)
-	base = strings.TrimSuffix(base, ".md")
-	if i := strings.Index(base, "-"); i > 0 {
-		title = base[i+1:]
-	}
-	return bestPath, title, nil
 }
 
 func ParseChapterRange(s string) ([]int, error) {

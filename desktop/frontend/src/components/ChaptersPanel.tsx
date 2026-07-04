@@ -6,7 +6,7 @@ import ChapterStatusBadge from "./ChapterStatusBadge";
 import ChapterVersionPanel from "./ChapterVersionPanel";
 import WritePanel from "./WritePanel";
 
-export type ChapterDocTab = "body" | "review" | "summary";
+export type ChapterDocTab = "body" | "review" | "summary" | "ai_check";
 export type ChaptersView = "read" | "write";
 
 type Props = {
@@ -104,7 +104,10 @@ export default function ChaptersPanel({
                       <span className="font-medium">第{c.number}章</span>
                       <ChapterStatusBadge status={c.status} compact />
                       <select
-                        value={(c.status || "reviewed").toLowerCase()}
+                        value={(() => {
+                          const s = (c.status || "reviewed").toLowerCase();
+                          return s === "scheduled" ? "reviewed" : s;
+                        })()}
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => {
                           e.stopPropagation();
@@ -118,8 +121,7 @@ export default function ChaptersPanel({
                       >
                         <option value="draft">草稿</option>
                         <option value="reviewed">已审</option>
-                        <option value="scheduled">待发布</option>
-                        <option value="published">已发布</option>
+                        <option value="published">发布</option>
                       </select>
                     </div>
                     <div className="truncate text-xs text-studio-muted">

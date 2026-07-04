@@ -19,6 +19,9 @@ export interface NovelCard {
 export interface StatusReport {
   phase: string;
   title: string;
+  genre?: string;
+  style?: string;
+  synopsis?: string;
   current_volume: number;
   current_chapter: number;
   chapter_count: number;
@@ -32,7 +35,6 @@ export interface StatusReport {
   estimated_total_chapters: number;
   remaining_chapters: number;
   avg_words_per_chapter: number;
-  style?: string;
   urgent?: string[];
   next_steps?: string[];
 }
@@ -265,6 +267,46 @@ export interface ChapterReviewMetricsDTO {
   issues: string[];
 }
 
+export interface StartAIDetectInput {
+  chapter: number;
+}
+
+export interface AIDetectJobInfo {
+  id: string;
+  chapter: number;
+  status: string;
+}
+
+export interface AIDetectReportDTO {
+  stage: string;
+  status: string;
+  summary: string;
+  artifacts?: string[];
+}
+
+export interface AIDetectHotspotDTO {
+  excerpt: string;
+  reason: string;
+  fix: string;
+}
+
+export interface ChapterAIDetectMetricsDTO {
+  chapter: number;
+  exists: boolean;
+  ai_score: number;
+  human_score: number;
+  risk_level: string;
+  publishable: boolean;
+  signals: string[];
+  hotspots: AIDetectHotspotDTO[];
+  report_body?: string;
+}
+
+export interface ActiveAIDetectJobDTO {
+  active: boolean;
+  job: AIDetectJobInfo;
+}
+
 export interface ActiveWriteJobDTO {
   active: boolean;
   job: WriteJobInfo;
@@ -438,6 +480,14 @@ export interface EntityDTO {
   last_chapter: number;
 }
 
+export interface EntityStateSnapshotDTO {
+  chapter: number;
+  chapter_title: string;
+  state: Record<string, string>;
+  recorded_at: string;
+  is_current: boolean;
+}
+
 export interface AppConfigDTO {
   model: string;
   base_url: string;
@@ -531,6 +581,12 @@ export interface WikiContentDTO {
   path?: string;
   can_open: boolean;
   editable: boolean;
+}
+
+export interface CreateWikiSettingInput {
+  category: string;
+  title: string;
+  template_kind: string;
 }
 
 export interface ChapterDocDTO {
@@ -630,6 +686,8 @@ interface AppBindings {
   GetWriteResumeInfo(): Promise<WriteResumeInfoDTO>;
   GetWriteGate(chapter: number, volume: number): Promise<WriteGateDTO>;
   ListEntities(entityType: string): Promise<EntityDTO[]>;
+  GetEntityHistory(entityID: string): Promise<EntityStateSnapshotDTO[]>;
+  MergeEntityDuplicates(): Promise<number>;
   GetAppConfig(): Promise<AppConfigDTO>;
   SaveAppConfig(input: SaveAppConfigInput): Promise<void>;
   StartDiscover(seedGenre: string): Promise<CoachTurnDTO[]>;
@@ -679,6 +737,10 @@ interface AppBindings {
   IsReviewRunning(): Promise<boolean>;
   GetActiveReviewJob(): Promise<ActiveReviewJobDTO>;
   GetChapterReviewMetrics(chapter: number): Promise<ChapterReviewMetricsDTO>;
+  StartAIDetectChapter(input: StartAIDetectInput): Promise<AIDetectJobInfo>;
+  CancelAIDetectChapter(jobID: string): Promise<void>;
+  GetActiveAIDetectJob(): Promise<ActiveAIDetectJobDTO>;
+  GetChapterAIDetectMetrics(chapter: number): Promise<ChapterAIDetectMetricsDTO>;
   ListMemories(): Promise<MemoryDTO[]>;
   ListForeshadows(status: string): Promise<ForeshadowDTO[]>;
   SendChapterCoachMessage(chapter: number, message: string): Promise<void>;
@@ -696,6 +758,7 @@ interface AppBindings {
   ListWikiEntries(): Promise<WikiEntryDTO[]>;
   GetWikiContent(id: string): Promise<WikiContentDTO>;
   SaveWikiContent(id: string, body: string): Promise<void>;
+  CreateWikiSetting(input: CreateWikiSettingInput): Promise<WikiContentDTO>;
 }
 
 declare global {

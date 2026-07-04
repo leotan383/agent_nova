@@ -3,6 +3,7 @@ package chapterdocs
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/tanlian/agent_nova/internal/pipeline"
@@ -15,6 +16,7 @@ const (
 	KindBody    = "body"
 	KindReview  = "review"
 	KindSummary = "summary"
+	KindAICheck = "ai_check"
 )
 
 // Doc 章节关联文档。
@@ -36,6 +38,8 @@ func pathFor(p *project.Project, chapter int, kind string) (string, error) {
 		return p.ReviewPath(chapter), nil
 	case KindSummary:
 		return p.SummaryPath(chapter), nil
+	case KindAICheck:
+		return p.AICheckPath(chapter), nil
 	default:
 		return "", fmt.Errorf("未知文档类型: %s", kind)
 	}
@@ -49,6 +53,8 @@ func titleFor(kind string, chapter int) string {
 		return fmt.Sprintf("第%d章 · 审查", chapter)
 	case KindSummary:
 		return fmt.Sprintf("第%d章 · 摘要", chapter)
+	case KindAICheck:
+		return fmt.Sprintf("第%d章 · AI味", chapter)
 	default:
 		return fmt.Sprintf("第%d章", chapter)
 	}
@@ -109,7 +115,7 @@ func Save(p *project.Project, st *store.Store, chapter int, kind, body string) (
 		return path, nil
 	case KindReview:
 		path := p.ReviewPath(chapter)
-		if err := os.MkdirAll(p.ReviewsDir(), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return "", err
 		}
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
@@ -128,7 +134,16 @@ func Save(p *project.Project, st *store.Store, chapter int, kind, body string) (
 		return path, nil
 	case KindSummary:
 		path := p.SummaryPath(chapter)
-		if err := os.MkdirAll(p.SummariesDir(), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			return "", err
+		}
+		return path, nil
+	case KindAICheck:
+		path := p.AICheckPath(chapter)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return "", err
 		}
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {

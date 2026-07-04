@@ -2,6 +2,7 @@ package version
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -44,6 +45,9 @@ func TestBeforeSaveSkipsSame(t *testing.T) {
 	p := setupTestProject(t)
 	body := "# 第一章\n\nhello"
 	path := p.ChapterPath(1, "第一章")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -59,6 +63,9 @@ func TestBeforeSaveSkipsSame(t *testing.T) {
 func TestBeforeSaveSnapshotsOnChange(t *testing.T) {
 	p := setupTestProject(t)
 	path := p.ChapterPath(1, "第一章")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte("old content"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -81,6 +88,9 @@ func TestBeforeSaveSnapshotsOnChange(t *testing.T) {
 func TestDiffWithNew(t *testing.T) {
 	p := setupTestProject(t)
 	path := p.ChapterPath(1, "第一章")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte("line1\nline2"), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -29,6 +29,7 @@ type App struct {
 	write     writeManager
 	plan      planManager
 	review    reviewManager
+	aiDetect  aiDetectManager
 	coach     coachManager
 	revise    reviseManager
 	selection selectionManager
@@ -41,6 +42,7 @@ func NewApp() *App {
 	a.write = *newWriteManager(a)
 	a.plan = *newPlanManager(a)
 	a.review = *newReviewManager(a)
+	a.aiDetect = *newAIDetectManager(a)
 	a.coach = *newCoachManager(a)
 	a.revise = *newReviseManager(a)
 	a.selection = *newSelectionManager(a)
@@ -338,14 +340,9 @@ func (a *App) syncChaptersFromDisk(actx *app.Context) error {
 		}
 	}
 	if !needsSync {
-		entries, err := os.ReadDir(actx.Project.ChaptersDir())
+		nums, err := actx.Project.ListChapterNumbers()
 		if err == nil {
-			onDisk := 0
-			for _, e := range entries {
-				if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
-					onDisk++
-				}
-			}
+			onDisk := len(nums)
 			if onDisk > len(chs) {
 				needsSync = true
 			}

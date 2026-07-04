@@ -82,3 +82,9 @@ export const REVIEW_EVENTS = {
   done: "review:done",
   error: "review:error",
 } as const;
+
+export const AI_DETECT_EVENTS = {
+  status: "ai_detect:status",
+  done: "ai_detect:done",
+  error: "ai_detect:error",
+} as const;

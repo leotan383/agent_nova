@@ -28,25 +28,14 @@ func (idx *Indexer) RebuildAll() error {
 }
 
 func (idx *Indexer) RebuildChapters(chapterNum int) error {
-	entries, err := os.ReadDir(idx.proj.ChaptersDir())
+	nums, err := idx.proj.ListChapterNumbers()
 	if err != nil {
 		return err
 	}
-	seen := map[int]struct{}{}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			continue
-		}
-		num := parseChapterNum(e.Name())
-		if num <= 0 {
-			continue
-		}
+	for _, num := range nums {
 		if chapterNum > 0 && num != chapterNum {
 			continue
 		}
-		seen[num] = struct{}{}
-	}
-	for num := range seen {
 		path, title, err := idx.proj.FindChapterFile(num)
 		if err != nil {
 			continue
@@ -65,7 +54,7 @@ func (idx *Indexer) RebuildChapters(chapterNum int) error {
 		}
 		if existing, err := idx.store.GetChapter(num); err == nil {
 			s := strings.ToLower(strings.TrimSpace(existing.Status))
-			if s == "published" || s == "scheduled" {
+			if s == "published" {
 				status = existing.Status
 			}
 		}

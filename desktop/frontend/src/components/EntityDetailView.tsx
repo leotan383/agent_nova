@@ -1,5 +1,7 @@
-import { Boxes, MapPin, Package, User } from "lucide-react";
-import { EntityDTO } from "../lib/wails";
+import { useEffect, useState } from "react";
+import { Boxes, Clock, MapPin, Package, User } from "lucide-react";
+import { EntityDTO, EntityStateSnapshotDTO, app } from "../lib/wails";
+import EntityTimeline from "./EntityTimeline";
 
 const typeMeta: Record<
   string,
@@ -36,11 +38,45 @@ export function metaFor(type: string) {
   );
 }
 
+type ViewMode = "current" | "timeline";
+
 export default function EntityDetailView({ entity }: { entity: EntityDTO }) {
   const meta = metaFor(entity.type);
   const Icon = meta.icon;
-  const stateEntries = Object.entries(entity.state);
+  const stateEntries = Object.entries(entity.state).filter(([k]) => k !== "aliases");
   const initial = entity.name.trim().charAt(0) || "?";
+
+  const [view, setView] = useState<ViewMode>("current");
+  const [history, setHistory] = useState<EntityStateSnapshotDTO[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+
+  useEffect(() => {
+    setView("current");
+    setHistory([]);
+    setHistoryError("");
+  }, [entity.id]);
+
+  useEffect(() => {
+    if (view !== "timeline") return;
+    let cancelled = false;
+    setHistoryLoading(true);
+    setHistoryError("");
+    app()
+      .GetEntityHistory(entity.id)
+      .then((list) => {
+        if (!cancelled) setHistory(list);
+      })
+      .catch((e) => {
+        if (!cancelled) setHistoryError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, entity.id]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -66,31 +102,63 @@ export default function EntityDetailView({ entity }: { entity: EntityDTO }) {
             )}
           </div>
         </div>
+
+        <div className="mt-4 flex gap-1 rounded-lg border border-studio-border bg-studio-panel/50 p-1">
+          {(
+            [
+              { id: "current" as const, label: "当前状态" },
+              { id: "timeline" as const, label: "状态时间线", icon: Clock },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setView(tab.id)}
+              className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                view === tab.id
+                  ? "bg-studio-accent/15 text-studio-accent"
+                  : "text-studio-muted hover:bg-studio-bg hover:text-studio-text"
+              }`}
+            >
+              {"icon" in tab && tab.icon && <tab.icon className="h-3.5 w-3.5 shrink-0" />}
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-        {stateEntries.length > 0 ? (
-          <>
-            <h4 className="mb-3 text-xs font-medium uppercase tracking-wide text-studio-muted">当前状态</h4>
-            <dl className="grid gap-3 sm:grid-cols-2">
-              {stateEntries.map(([k, v]) => (
-                <div
-                  key={k}
-                  className="rounded-xl border border-studio-border bg-studio-bg/50 px-4 py-3 transition hover:border-studio-border hover:bg-studio-bg"
-                >
-                  <dt className="text-[10px] font-medium uppercase tracking-wide text-studio-muted">{k}</dt>
-                  <dd className="mt-1.5 text-sm leading-relaxed text-studio-text">{v}</dd>
-                </div>
-              ))}
-            </dl>
-          </>
+        {view === "current" ? (
+          stateEntries.length > 0 ? (
+            <>
+              <h4 className="mb-3 text-xs font-medium uppercase tracking-wide text-studio-muted">当前状态</h4>
+              <dl className="grid gap-3 sm:grid-cols-2">
+                {stateEntries.map(([k, v]) => (
+                  <div
+                    key={k}
+                    className="rounded-xl border border-studio-border bg-studio-bg/50 px-4 py-3 transition hover:border-studio-border hover:bg-studio-bg"
+                  >
+                    <dt className="text-[10px] font-medium uppercase tracking-wide text-studio-muted">{k}</dt>
+                    <dd className="mt-1.5 text-sm leading-relaxed text-studio-text">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <p className="text-sm text-studio-muted">暂无结构化状态字段</p>
+              <p className="mt-1 max-w-xs text-xs text-studio-muted/70">
+                后续章节审查时，若正文涉及该实体，会自动补充状态信息。
+              </p>
+            </div>
+          )
         ) : (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-sm text-studio-muted">暂无结构化状态字段</p>
-            <p className="mt-1 max-w-xs text-xs text-studio-muted/70">
-              后续章节审查时，若正文涉及该实体，会自动补充状态信息。
-            </p>
-          </div>
+          <>
+            {historyError && (
+              <div className="mb-4 studio-alert-error-compact">{historyError}</div>
+            )}
+            <EntityTimeline snapshots={history} loading={historyLoading} accentClass={meta.accent} />
+          </>
         )}
       </div>
     </div>

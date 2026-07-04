@@ -72,7 +72,7 @@ func BuildDailyReport(p *project.Project, st *store.Store) (DailyReport, error) 
 			if s != "published" {
 				bufferCount++
 			}
-			if s == "reviewed" || s == "scheduled" {
+			if s == "reviewed" {
 				bufferReady++
 			}
 		}
@@ -120,8 +120,8 @@ func BuildDailyReport(p *project.Project, st *store.Store) (DailyReport, error) 
 	if bufferReady > 0 && bufferReady >= bufferTarget {
 		suggestions = append(suggestions, status.TodoItem{
 			ID:       "buffer_publish",
-			Label:    fmt.Sprintf("存稿充足（%d 章待发布）", bufferReady),
-			Detail:   "可将已审章节标记为「已发布」或「待发布」",
+			Label:    fmt.Sprintf("存稿充足（%d 章已审）", bufferReady),
+			Detail:   "可将已审章节标记为「发布」",
 			Severity: "info",
 			Action:   "open_chapters",
 		})

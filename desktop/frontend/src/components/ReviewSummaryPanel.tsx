@@ -19,13 +19,17 @@ type Props = {
   /** 可折叠模式：默认收起，把空间留给下方报告正文 */
   collapsible?: boolean;
   defaultExpanded?: boolean;
+  /** 子 TAB 内嵌：占满剩余高度并可滚动 */
+  fill?: boolean;
 };
 
 export default function ReviewSummaryPanel({
   metrics,
-  collapsible = false,
+  collapsible: collapsibleProp,
   defaultExpanded = false,
+  fill = false,
 }: Props) {
+  const collapsible = collapsibleProp ?? !fill;
   const [expanded, setExpanded] = useState(!collapsible || defaultExpanded);
   const { hookScore, coolPoint, debt, issues } = metrics;
   const fixIssues = issues.filter((i) => issueKind(i) === "fix");
@@ -69,7 +73,13 @@ export default function ReviewSummaryPanel({
   }
 
   return (
-    <section className="shrink-0 border-b border-studio-border bg-gradient-to-br from-studio-accent/5 via-transparent to-studio-ai/5">
+    <section
+      className={
+        fill
+          ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-gradient-to-br from-studio-accent/5 via-transparent to-studio-ai/5"
+          : "shrink-0 border-b border-studio-border bg-gradient-to-br from-studio-accent/5 via-transparent to-studio-ai/5"
+      }
+    >
       <div className="flex items-center justify-between gap-2 px-4 py-2.5">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-studio-accent" />
@@ -88,7 +98,9 @@ export default function ReviewSummaryPanel({
       </div>
 
       <div
-        className={`overflow-y-auto px-4 pb-3 ${collapsible ? "max-h-[min(240px,32vh)]" : "max-h-[min(320px,40vh)]"}`}
+        className={`overflow-y-auto px-4 pb-3 ${
+          fill ? "min-h-0 flex-1" : collapsible ? "max-h-[min(240px,32vh)]" : "max-h-[min(320px,40vh)]"
+        }`}
       >
         <div className="grid gap-2 sm:grid-cols-3">
           <div className="rounded-lg border border-studio-border bg-studio-panel/80 p-2.5">

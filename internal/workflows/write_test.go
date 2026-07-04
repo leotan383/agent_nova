@@ -35,3 +35,33 @@ func TestExtractPolishedBodyStripsMetrics(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestExtractPolishedBodyStripsPreamble(t *testing.T) {
+	longBody := strings.Repeat("林枫深吸一口气，拨开了最后一片藤蔓。", 15)
+	reviewed := "## 润色版正文\n\n以下为根据审查意见修改的润色版本，重点调整了：（1）情感铺垫。\n\n---\n\n# 第八章 洞穴暗影\n\n" + longBody
+	got := extractPolishedBody(reviewed, "fallback")
+	want := "# 第八章 洞穴暗影\n\n" + longBody
+	if got != want {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestStripReviewAppendixSuffix(t *testing.T) {
+	chapter := "# 第八章 洞穴暗影\n\n" + strings.Repeat("时间在洞穴外，那两个修士正在一步步逼近。", 12)
+	appendix := "\n\n---\n\n## 润色说明\n\n| 修改点 | 原文 | 润色后 | 理由 |\n|---|---|---|---|\n| 章首衔接 | 原句 | 新句 | 过渡 |"
+	got := normalizeChapterBody(chapter + appendix)
+	if got != chapter {
+		t.Fatalf("got %q want %q", got, chapter)
+	}
+}
+
+func TestExtractPolishedBodyStripsAppendix(t *testing.T) {
+	longBody := strings.Repeat("时间在洞穴外，那两个修士正在一步步逼近。", 15)
+	appendix := "\n\n---\n\n## 润色说明\n\n| 修改点 | 原文 | 润色后 | 理由 |\n|---|---|---|---|\n| 节奏 | a | b | c |"
+	reviewed := "## 润色版正文\n\n# 第八章 洞穴暗影\n\n" + longBody + appendix
+	got := extractPolishedBody(reviewed, "fallback")
+	want := "# 第八章 洞穴暗影\n\n" + longBody
+	if got != want {
+		t.Fatalf("got %q", got)
+	}
+}

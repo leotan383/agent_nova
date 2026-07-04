@@ -135,8 +135,7 @@ func RunGate(p *project.Project, st *store.Store, chapter int, stage GateStage) 
 			}
 		}
 	case GatePrecommit:
-		matches, _ := filepath.Glob(filepath.Join(p.ChaptersDir(), fmt.Sprintf("第%03d章*.md", chapter)))
-		if len(matches) == 0 {
+		if _, _, err := p.FindChapterFile(chapter); err != nil {
 			res.Issues = append(res.Issues, "正文文件不存在")
 		}
 	case GatePostcommit:
@@ -175,6 +174,9 @@ func SaveChapter(p *project.Project, chapter int, title, content string) (string
 
 func SaveSummary(p *project.Project, chapter int, summary string) error {
 	path := p.SummaryPath(chapter)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
 	return os.WriteFile(path, []byte(summary), 0o644)
 }
 
@@ -194,12 +196,15 @@ func HasReviewReport(p *project.Project, chapter int) bool {
 	return err == nil && strings.TrimSpace(string(data)) != ""
 }
 
-// InferChapterStatus 根据审查报告等推断章节状态（draft / reviewed / published / scheduled）。
+// InferChapterStatus 根据审查报告等推断章节状态（draft / reviewed / published）。
 func InferChapterStatus(p *project.Project, st *store.Store, chapter int) string {
 	if ch, err := st.GetChapter(chapter); err == nil {
 		s := strings.ToLower(strings.TrimSpace(ch.Status))
-		if s == "published" || s == "scheduled" {
+		if s == "published" {
 			return s
+		}
+		if s == "scheduled" {
+			return "reviewed"
 		}
 	}
 	if HasReviewReport(p, chapter) {

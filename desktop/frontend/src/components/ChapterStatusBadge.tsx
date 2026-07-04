@@ -9,11 +9,6 @@ const statusMeta: Record<string, { label: string; hint: string; className: strin
     hint: "已有审查报告",
     className: "bg-[rgb(var(--studio-diff-add-bg))] text-[rgb(var(--studio-diff-add-stat))]",
   },
-  scheduled: {
-    label: "待发布",
-    hint: "已排期，尚未发布",
-    className: "bg-violet-500/15 text-violet-600 dark:text-violet-300",
-  },
   published: {
     label: "已发布",
     hint: "已标记发布",

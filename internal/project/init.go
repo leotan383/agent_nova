@@ -63,8 +63,9 @@ func InitProject(in InitInput) (*InitResult, error) {
 		filepath.Join(root, "设定集"),
 		filepath.Join(root, "大纲"),
 		filepath.Join(root, "正文"),
-		filepath.Join(root, "审查"),
-		filepath.Join(root, "摘要"),
+	}
+	for _, sub := range DefaultSettingSubdirs {
+		dirs = append(dirs, filepath.Join(root, "设定集", sub))
 	}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o755); err != nil {
@@ -102,9 +103,10 @@ func InitProject(in InitInput) (*InitResult, error) {
 		return nil, err
 	}
 
-	// 创建设定集模板文件
+	// 创建设定集模板文件（按子目录分类存放）
 	for _, f := range DefaultSettingFiles(in.Genre) {
-		path := filepath.Join(p.SettingsDir(), f)
+		sub := SettingFileSubdir(f)
+		path := filepath.Join(p.SettingsDir(), sub, f)
 		if err := os.WriteFile(path, settingTemplateContent(f, meta), 0o644); err != nil {
 			return nil, err
 		}

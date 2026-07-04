@@ -1,36 +1,54 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BookOpen,
-  ChevronDown,
-  ChevronRight,
+  CircleHelp,
   ExternalLink,
   Loader2,
+  MapPin,
+  Package,
+  Plus,
   RefreshCw,
+  ScrollText,
   Search,
+  Swords,
   Users,
 } from "lucide-react";
-import { EntityDTO, WikiContentDTO, WikiEntryDTO, app } from "../lib/wails";
+import { EntityDTO, StatusReport, WikiContentDTO, WikiEntryDTO, app } from "../lib/wails";
+import {
+  META_SYNOPSIS_ID,
+  SettingCategory,
+  filterByCategory,
+  splitCategoryEntries,
+} from "../lib/wikiCategories";
 import { confirmUnsavedLeave } from "../lib/unsavedGuard";
 import EntityDetailView from "./EntityDetailView";
+import CreateSettingDialog from "./CreateSettingDialog";
 import MarkdownEditor from "./MarkdownEditor";
 
-const GROUP_ORDER = ["人物", "设定", "大纲"] as const;
-
-const groupIcon: Record<string, typeof Users> = {
-  人物: Users,
-  设定: BookOpen,
-  大纲: BookOpen,
+const categoryIcon: Record<SettingCategory, typeof Users> = {
+  角色: Users,
+  背景: BookOpen,
+  势力: Swords,
+  地点: MapPin,
+  物品: Package,
+  其他: ScrollText,
 };
 
 const kindLabel: Record<string, string> = {
   setting: "设定集",
   outline: "大纲",
-  entity: "状态",
+  entity: "AI提取",
   memory: "记忆",
+  meta: "作品信息",
 };
 
 type Props = {
+  status?: StatusReport | null;
   initialSelectedID?: string;
+  /** 从主导航进入某一设定分类时，只展示该分类下的条目 */
+  categoryFilter?: SettingCategory | null;
+  /** 从主导航进入简介/大纲时，只展示主题区 */
+  themeOnly?: boolean;
 };
 
 function parseEntityID(wikiID: string): string {
@@ -38,7 +56,19 @@ function parseEntityID(wikiID: string): string {
   return i >= 0 ? wikiID.slice(i + 1) : wikiID;
 }
 
-export default function WikiPanel({ initialSelectedID = "" }: Props) {
+type CategorySubview = "settings" | "states";
+
+const CATEGORY_SUBVIEW_HINTS: Partial<Record<CategorySubview, string>> = {
+  states:
+    "每章审查完成后，系统从正文与摘要中自动提取角色/地点/物品等信息，存入项目数据库并随连载更新。与「设定」中的手写档案不同，此处为只读。",
+};
+
+export default function WikiPanel({
+  status,
+  initialSelectedID = "",
+  categoryFilter = null,
+  themeOnly = false,
+}: Props) {
   const [entries, setEntries] = useState<WikiEntryDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -48,17 +78,16 @@ export default function WikiPanel({ initialSelectedID = "" }: Props) {
   const [entityData, setEntityData] = useState<EntityDTO | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [categorySubview, setCategorySubview] = useState<CategorySubview>("settings");
+  const [createOpen, setCreateOpen] = useState(false);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
+      await app().MergeEntityDuplicates();
       const list = await app().ListWikiEntries();
       setEntries(list);
-      if (list.length > 0) {
-        setSelectedID((prev) => prev || list[0].id);
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -76,25 +105,108 @@ export default function WikiPanel({ initialSelectedID = "" }: Props) {
     }
   }, [initialSelectedID]);
 
-  const loadContent = useCallback(async (id: string) => {
-    setContentLoading(true);
-    setError("");
-    setEntityData(null);
-    try {
-      const c = await app().GetWikiContent(id);
-      setContent(c);
-      if (c.kind === "entity") {
-        const entityId = parseEntityID(c.id);
-        const list = await app().ListEntities("");
-        setEntityData(list.find((e) => e.id === entityId) ?? null);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setContent(null);
-    } finally {
-      setContentLoading(false);
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let list = entries;
+    if (categoryFilter) {
+      list = filterByCategory(list, categoryFilter);
     }
-  }, []);
+    if (!q) return list;
+    return list.filter(
+      (e) =>
+        e.title.toLowerCase().includes(q) ||
+        e.subtitle.toLowerCase().includes(q) ||
+        (kindLabel[e.kind] ?? e.kind).toLowerCase().includes(q),
+    );
+  }, [entries, query, categoryFilter]);
+
+  const { settingEntries, entityEntries } = useMemo(() => {
+    if (!categoryFilter) {
+      return { settingEntries: [] as WikiEntryDTO[], entityEntries: [] as WikiEntryDTO[] };
+    }
+    const { archives, states } = splitCategoryEntries(filtered, categoryFilter);
+    const byTitle = (a: WikiEntryDTO, b: WikiEntryDTO) =>
+      a.title.localeCompare(b.title, "zh-CN");
+    return {
+      settingEntries: [...archives].sort(byTitle),
+      entityEntries: [...states].sort(byTitle),
+    };
+  }, [filtered, categoryFilter]);
+
+  const activeCategoryEntries =
+    categorySubview === "settings" ? settingEntries : entityEntries;
+
+  useEffect(() => {
+    setCategorySubview("settings");
+  }, [categoryFilter]);
+
+  // 切换分类 / 子 TAB 时，若当前选中不在列表内则自动选中第一条
+  useEffect(() => {
+    if (loading || themeOnly || initialSelectedID) return;
+    if (!categoryFilter) return;
+    const list = categorySubview === "settings" ? settingEntries : entityEntries;
+    setSelectedID((prev) => {
+      if (list.some((e) => e.id === prev)) return prev;
+      return list[0]?.id ?? settingEntries[0]?.id ?? entityEntries[0]?.id ?? "";
+    });
+  }, [
+    categoryFilter,
+    categorySubview,
+    settingEntries,
+    entityEntries,
+    loading,
+    themeOnly,
+    initialSelectedID,
+  ]);
+
+  const loadContent = useCallback(
+    async (id: string) => {
+      setContentLoading(true);
+      setError("");
+      setEntityData(null);
+
+      if (id === META_SYNOPSIS_ID) {
+        setContent({
+          id: META_SYNOPSIS_ID,
+          title: "简介",
+          group: "主题",
+          kind: "meta",
+          body:
+            status?.synopsis?.trim() ||
+            "暂无简介。可在立项时填写，或编辑 nova.yaml 中的 synopsis 字段。",
+          can_open: false,
+          editable: false,
+        });
+        setContentLoading(false);
+        return;
+      }
+
+      try {
+        const c = await app().GetWikiContent(id);
+        setContent(c);
+        if (c.kind === "entity") {
+          const entityId = parseEntityID(c.id);
+          const list = await app().ListEntities("");
+          const canonicalKey = entityId.includes(":") ? entityId : `character:${entityId}`;
+          setEntityData(
+            list.find((e) => e.id === entityId || e.id === canonicalKey) ??
+              list.find((e) => {
+                const name = e.name?.trim() ?? "";
+                const canon = name.replace(/[（(][^）)]*[）)]$/, "").trim();
+                return `${e.type || "character"}:${canon}` === canonicalKey;
+              }) ??
+              null,
+          );
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        setContent(null);
+      } finally {
+        setContentLoading(false);
+      }
+    },
+    [status?.synopsis],
+  );
 
   useEffect(() => {
     if (!selectedID) {
@@ -104,42 +216,6 @@ export default function WikiPanel({ initialSelectedID = "" }: Props) {
     }
     loadContent(selectedID);
   }, [selectedID, loadContent]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return entries;
-    return entries.filter(
-      (e) =>
-        e.title.toLowerCase().includes(q) ||
-        e.subtitle.toLowerCase().includes(q) ||
-        e.group.toLowerCase().includes(q) ||
-        (kindLabel[e.kind] ?? e.kind).toLowerCase().includes(q),
-    );
-  }, [entries, query]);
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, WikiEntryDTO[]>();
-    for (const g of GROUP_ORDER) {
-      map.set(g, []);
-    }
-    for (const e of filtered) {
-      const list = map.get(e.group) ?? [];
-      list.push(e);
-      map.set(e.group, list);
-    }
-    return GROUP_ORDER.map((g) => ({ group: g, items: map.get(g) ?? [] })).filter((x) => x.items.length > 0);
-  }, [filtered]);
-
-  const queryActive = query.trim().length > 0;
-
-  const toggleGroup = (group: string) => {
-    setCollapsedGroups((prev) => ({ ...prev, [group]: !prev[group] }));
-  };
-
-  const isGroupCollapsed = (group: string) => {
-    if (queryActive) return false;
-    return collapsedGroups[group] ?? false;
-  };
 
   const openInFolder = async () => {
     if (!content?.path) return;
@@ -168,26 +244,90 @@ export default function WikiPanel({ initialSelectedID = "" }: Props) {
     setSelectedID(id);
   };
 
+  const switchCategorySubview = async (next: CategorySubview) => {
+    if (next === categorySubview) return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
+    setCategorySubview(next);
+    const list = next === "settings" ? settingEntries : entityEntries;
+    if (list.length === 0) {
+      setSelectedID("");
+      return;
+    }
+    if (!list.some((e) => e.id === selectedID)) {
+      setSelectedID(list[0].id);
+    }
+  };
+
+  const openCreateSetting = () => {
+    if (!categoryFilter) return;
+    setCreateOpen(true);
+  };
+
+  const handleSettingCreated = async (id: string) => {
+    setCategorySubview("settings");
+    await loadEntries();
+    setSelectedID(id);
+  };
+
   const showEntityView = content?.kind === "entity" && entityData;
+  const panelTitle = categoryFilter ?? "设定";
+
+  const CategoryIcon = categoryFilter ? categoryIcon[categoryFilter] : BookOpen;
+
+  const renderEntryRow = (e: WikiEntryDTO) => (
+    <li key={e.id}>
+      <button
+        type="button"
+        onClick={() => selectEntry(e.id)}
+        className={`w-full border-b border-studio-border/50 px-3 py-2.5 text-left text-sm transition hover:bg-studio-bg ${
+          selectedID === e.id ? "bg-studio-bg text-studio-accent" : ""
+        }`}
+      >
+        <span className="block truncate font-medium">{e.title}</span>
+        {e.subtitle && (
+          <div className="truncate text-xs text-studio-muted">{e.subtitle}</div>
+        )}
+      </button>
+    </li>
+  );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-      <p className="shrink-0 text-xs leading-relaxed text-studio-muted">
-        设定集、大纲与审查后自动提取的人物/地点/物品状态，均在此统一浏览。带「状态」标记的条目由 AI 审查维护，不可手动编辑。
-      </p>
-
-      <div className="flex min-h-0 flex-1 gap-4 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className={`flex min-h-0 flex-1 overflow-hidden ${themeOnly ? "" : "gap-4"}`}>
+        {!themeOnly && (
         <div className="flex w-56 shrink-0 flex-col overflow-hidden rounded-xl border border-studio-border bg-studio-panel xl:w-64">
           <div className="flex shrink-0 items-center justify-between border-b border-studio-border px-3 py-2.5">
-            <span className="text-sm font-medium">条目列表</span>
-            <button
-              type="button"
-              onClick={loadEntries}
-              className="rounded p-1 text-studio-muted hover:bg-studio-bg hover:text-studio-text"
-              title="刷新"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            </button>
+            <div className="flex items-center gap-2 min-w-0">
+              <CategoryIcon className="h-4 w-4 shrink-0 text-studio-muted" />
+              <span className="truncate text-sm font-medium">{panelTitle}</span>
+              {categoryFilter && (settingEntries.length > 0 || entityEntries.length > 0) && (
+                <span className="text-xs text-studio-muted">
+                  ({settingEntries.length}
+                  {entityEntries.length > 0 && ` + ${entityEntries.length}`})
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-0.5">
+              {categoryFilter && categorySubview === "settings" && (
+                <button
+                  type="button"
+                  onClick={openCreateSetting}
+                  className="rounded p-1 text-studio-muted hover:bg-studio-bg hover:text-studio-text"
+                  title={`新建${categoryFilter}设定`}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={loadEntries}
+                className="rounded p-1 text-studio-muted hover:bg-studio-bg hover:text-studio-text"
+                title="刷新"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              </button>
+            </div>
           </div>
 
           <div className="shrink-0 border-b border-studio-border px-3 py-2">
@@ -196,72 +336,72 @@ export default function WikiPanel({ initialSelectedID = "" }: Props) {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="搜索名称或类型…"
+                placeholder="搜索…"
                 className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-studio-muted/70"
               />
             </div>
           </div>
+
+          {categoryFilter && !themeOnly && (
+            <div className="flex shrink-0 gap-1 border-b border-studio-border bg-studio-panel/30 px-2 py-1.5">
+              {(
+                [
+                  { id: "settings" as const, label: "设定", count: settingEntries.length },
+                  { id: "states" as const, label: "AI提取", count: entityEntries.length },
+                ] as const
+              ).map(({ id, label, count }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => void switchCategorySubview(id)}
+                  className={`flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition ${
+                    categorySubview === id
+                      ? "bg-studio-accent/15 text-studio-accent"
+                      : "text-studio-muted hover:bg-studio-bg hover:text-studio-text"
+                  }`}
+                >
+                  <span className="truncate">{label}</span>
+                  {id === "states" && (
+                    <span
+                      role="img"
+                      aria-label="AI提取数据来源说明"
+                      title={CATEGORY_SUBVIEW_HINTS.states}
+                      className="inline-flex shrink-0 rounded-sm opacity-70 hover:opacity-100"
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <CircleHelp className="h-3 w-3" />
+                    </span>
+                  )}
+                  <span className="shrink-0 tabular-nums text-[10px] opacity-80">{count}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="min-h-0 flex-1 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-10 text-studio-muted">
                 <Loader2 className="h-5 w-5 animate-spin" />
               </div>
-            ) : grouped.length === 0 ? (
-              <p className="p-4 text-center text-sm text-studio-muted">暂无条目</p>
+            ) : categoryFilter ? (
+              activeCategoryEntries.length === 0 ? (
+                <p className="px-4 py-6 text-center text-xs leading-relaxed text-studio-muted">
+                  {categorySubview === "settings"
+                    ? "暂无设定文档，点击右上角 + 在文件夹中新建 Markdown"
+                    : "暂无 AI 提取记录，写章审查后会自动更新"}
+                </p>
+              ) : (
+                <ul>{activeCategoryEntries.map(renderEntryRow)}</ul>
+              )
             ) : (
-              grouped.map(({ group, items }) => {
-                const Icon = groupIcon[group] ?? BookOpen;
-                const collapsed = isGroupCollapsed(group);
-                return (
-                  <div key={group} className="border-b border-studio-border/60">
-                    <button
-                      type="button"
-                      onClick={() => toggleGroup(group)}
-                      className="sticky top-0 z-10 flex w-full items-center gap-1.5 bg-studio-panel/95 px-3 py-2 text-left text-xs font-medium text-studio-muted backdrop-blur-sm transition hover:bg-studio-bg hover:text-studio-text"
-                    >
-                      {collapsed ? (
-                        <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                      ) : (
-                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                      )}
-                      <Icon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="flex-1">{group}</span>
-                      <span className="text-studio-muted/60">({items.length})</span>
-                    </button>
-                    {!collapsed && (
-                      <ul>
-                        {items.map((e) => (
-                          <li key={e.id}>
-                            <button
-                              type="button"
-                              onClick={() => selectEntry(e.id)}
-                              className={`w-full border-b border-studio-border/50 px-3 py-2.5 pl-8 text-left text-sm transition hover:bg-studio-bg ${
-                                selectedID === e.id ? "bg-studio-bg text-studio-accent" : ""
-                              }`}
-                            >
-                              <div className="flex items-center gap-1.5">
-                                <span className="min-w-0 flex-1 truncate font-medium">{e.title}</span>
-                                {e.kind === "entity" && (
-                                  <span className="shrink-0 rounded bg-studio-ai/10 px-1.5 py-0.5 text-[9px] text-studio-ai">
-                                    状态
-                                  </span>
-                                )}
-                              </div>
-                              <div className="truncate text-xs text-studio-muted">
-                                {kindLabel[e.kind] ?? e.subtitle}
-                              </div>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })
+              <p className="px-4 py-6 text-center text-xs text-studio-muted">
+                请从左侧选择设定分类
+              </p>
             )}
           </div>
         </div>
+        )}
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-studio-border bg-studio-panel">
           {error && !content && (
@@ -271,7 +411,9 @@ export default function WikiPanel({ initialSelectedID = "" }: Props) {
           )}
 
           {!selectedID ? (
-            <p className="flex flex-1 items-center justify-center text-studio-muted/70">选择左侧条目查看详情</p>
+            <p className="flex flex-1 items-center justify-center text-studio-muted/70">
+              {themeOnly ? "请从左侧「创作 → 大纲」选择条目" : "选择条目查看详情"}
+            </p>
           ) : contentLoading ? (
             <div className="flex flex-1 items-center justify-center text-studio-muted">
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -287,7 +429,7 @@ export default function WikiPanel({ initialSelectedID = "" }: Props) {
                     <p className="text-xs text-studio-muted">
                       {content.group}
                       {kindLabel[content.kind] && ` · ${kindLabel[content.kind]}`}
-                      {!content.editable && " · 只读"}
+                      {!content.editable && content.kind !== "entity" && " · 只读"}
                     </p>
                   </div>
                   {content.can_open && content.path && (
@@ -316,6 +458,15 @@ export default function WikiPanel({ initialSelectedID = "" }: Props) {
           ) : null}
         </div>
       </div>
+
+      {categoryFilter && (
+        <CreateSettingDialog
+          open={createOpen}
+          category={categoryFilter}
+          onClose={() => setCreateOpen(false)}
+          onCreated={(id) => void handleSettingCreated(id)}
+        />
+      )}
     </div>
   );
 }

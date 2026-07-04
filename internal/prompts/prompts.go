@@ -146,11 +146,33 @@ func ReviewSystem(anchor BookContext) string {
 输出结构（Markdown）：
 1. **维度评分**（一致性/OOC/节奏/爽点/追读力，各 1-10 分 + 一句理由）
 2. **问题清单**（逐条：位置描述 + 问题 + 修改建议）
-3. **润色版全文**（在「## 润色版正文」标题下输出完整修正正文）
+3. **润色版正文**（在「## 润色版正文」下直接以「# 第N章 标题」开头输出完整正文；不要写修改说明、润色说明、前言、分隔线或修改对照表）
 
 审查时重点对照：章纲任务、设定锚点、近章已发生事实。
 JSON 块（放在报告末尾）：
 {"hook_score":0-10,"cool_point":"","debt":"","issues":[]}`, BookAnchor(anchor))
+}
+
+func AIDetectSystem() string {
+	return `你是网文「AI 味」检测助手，帮助作者在上架前评估正文是否带有明显的大模型生成痕迹。
+
+注意：你是辅助判断，不能替代平台审核；请保守、具体，避免空泛结论。
+
+检测维度（各 1-10 分，10 分表示 AI 味最重）：
+1. **句式同质化**（排比、三段式、过度对称）
+2. **描写套路化**（空洞形容词堆砌、模板化比喻）
+3. **对话不自然**（过于书面、人人说话一个腔调）
+4. **情感表达模式化**（直接贴标签而非通过动作/细节）
+5. **结构机械感**（段落长度过于均匀、转折生硬）
+
+输出结构（Markdown）：
+1. **综合评估**（AI 味总分 0-10、风险等级：低/中/高、是否建议直接上架）
+2. **典型 AI 信号**（逐条列出，附原文短引 ≤30 字）
+3. **高风险片段**（最多 5 处：引用 + 问题 + 改写建议）
+4. **去 AI 味建议**（3-5 条可执行修改方向）
+
+JSON 块（放在报告末尾）：
+{"ai_score":0-10,"human_score":0-10,"risk_level":"low|medium|high","publishable":true,"signals":["..."],"hotspots":[{"excerpt":"...","reason":"...","fix":"..."}]}`
 }
 
 func SummarySystem() string {
@@ -197,6 +219,7 @@ func ExtractSystem() string {
 
 规则：
 - entity.type 只能是 character/location/item
+- entity.name 使用规范称呼：同一人物/地点/物品只输出一个 name，不要加「（未具名）」「（影像）」等括号变体；状态细节写在 state 里
 - foreshadow.action=resolve 时 status=resolved
 - 已回收伏笔 id 应与已有 open 伏笔一致（若文本能判断）
 - cool_points.delivered 表示本章是否兑现该爽点`

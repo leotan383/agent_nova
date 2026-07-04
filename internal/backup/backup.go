@@ -16,7 +16,7 @@ func Create(p *project.Project, label string) error {
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return err
 	}
-	dirs := []string{"设定集", "大纲", "正文", "审查", "摘要"}
+	dirs := []string{"设定集", "大纲", "正文"}
 	for _, d := range dirs {
 		src := filepath.Join(p.Root, d)
 		if err := copyDir(src, filepath.Join(dest, d)); err != nil && !os.IsNotExist(err) {
@@ -51,7 +51,7 @@ func Restore(p *project.Project, name string) error {
 	if err != nil || !info.IsDir() {
 		return fmt.Errorf("backup not found: %s", name)
 	}
-	dirs := []string{"设定集", "大纲", "正文", "审查", "摘要"}
+	dirs := []string{"设定集", "大纲", "正文"}
 	for _, d := range dirs {
 		if err := copyDir(filepath.Join(src, d), filepath.Join(p.Root, d)); err != nil && !os.IsNotExist(err) {
 			return err

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/tanlian/agent_nova/internal/agent"
@@ -27,12 +28,17 @@ func NewInitWorkflow(cfg *config.Config, root string, st *store.Store) *InitWork
 
 func (w *InitWorkflow) EnrichSettings(ctx context.Context, p *project.Project) (*report.Report, error) {
 	var settings []string
-	entries, _ := os.ReadDir(p.SettingsDir())
-	for _, e := range entries {
-		if !e.IsDir() {
-			settings = append(settings, "设定集/"+e.Name())
+	_ = filepath.Walk(p.SettingsDir(), func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
+			return err
 		}
-	}
+		rel, err := filepath.Rel(p.Root, path)
+		if err != nil {
+			return err
+		}
+		settings = append(settings, filepath.ToSlash(rel))
+		return nil
+	})
 	userPrompt := fmt.Sprintf(`请完善以下设定文件内容（保留 Markdown 结构）：
 书名：%s
 题材：%s
@@ -144,14 +150,15 @@ func (w *PlanWorkflow) PlanVolume(ctx context.Context, p *project.Project, vol i
 }
 
 func readDirConcat(dir string) string {
-	entries, _ := os.ReadDir(dir)
 	var parts []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
+			return err
 		}
-		data, _ := os.ReadFile(fmt.Sprintf("%s/%s", dir, e.Name()))
-		parts = append(parts, string(data))
-	}
+		data, _ := os.ReadFile(path)
+		rel, _ := filepath.Rel(dir, path)
+		parts = append(parts, fmt.Sprintf("### %s\n%s", filepath.ToSlash(rel), string(data)))
+		return nil
+	})
 	return strings.Join(parts, "\n---\n")
 }

@@ -69,11 +69,15 @@ func ExtractAndPersistFacts(ctx context.Context, ag *agent.Agent, st *store.Stor
 		if typ == "" {
 			typ = "character"
 		}
-		id := entityID(typ, e.Name)
+		canonical := store.CanonicalEntityName(e.Name)
+		state := store.AppendEntityAlias(e.State, e.Name)
+		id := store.EntityID(typ, canonical)
+		stateJSON := store.EntityStateJSON(state)
 		_ = st.UpsertEntity(store.Entity{
-			ID: id, Type: typ, Name: e.Name,
-			StateJSON: store.EntityStateJSON(e.State), LastChapter: chapter,
+			ID: id, Type: typ, Name: canonical,
+			StateJSON: stateJSON, LastChapter: chapter,
 		})
+		_ = st.RecordEntityStateHistory(id, chapter, stateJSON)
 	}
 	for _, f := range facts.Foreshadows {
 		if f.Description == "" {
@@ -120,10 +124,6 @@ func ExtractAndPersistFacts(ctx context.Context, ag *agent.Agent, st *store.Stor
 		})
 	}
 	return nil
-}
-
-func entityID(typ, name string) string {
-	return fmt.Sprintf("%s:%s", typ, strings.TrimSpace(name))
 }
 
 func foreshadowID(desc string) string {

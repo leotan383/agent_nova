@@ -57,11 +57,13 @@ func Search(p *project.Project, st *store.Store, query string, limit int) ([]Hit
 					title = fmt.Sprintf("第%d章", chapter)
 				}
 			} else if kind == "setting" {
-				base := filepath.Base(id)
-				title = strings.TrimSuffix(base, ".md")
-				if base != "" {
-					wikiID = wiki.KindSetting + ":" + base
+				relFromRoot := filepath.ToSlash(id)
+				title = strings.TrimSuffix(filepath.Base(relFromRoot), ".md")
+				settingsRel := strings.TrimPrefix(relFromRoot, "设定集/")
+				if settingsRel == relFromRoot {
+					settingsRel = filepath.Base(relFromRoot)
 				}
+				wikiID = wiki.KindSetting + ":" + settingsRel
 			}
 			add(Hit{Kind: kind, ID: id, Title: title, Snippet: snippet, Chapter: chapter, WikiID: wikiID})
 		}

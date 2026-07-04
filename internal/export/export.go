@@ -32,15 +32,59 @@ type ChapterFile struct {
 
 var chapterNumRe = regexp.MustCompile(`^第(\d+)章`)
 
-// ListChapters 按章号排序列出正文文件。
+// ListChapters 按章号排序列出正文（仅 正文/第NNN章-*/正文.md，兼容旧平铺文件）。
 func ListChapters(p *project.Project, opts Options) ([]ChapterFile, error) {
+	if err := p.MigrateChapterLayout(); err != nil {
+		return nil, err
+	}
 	entries, err := os.ReadDir(p.ChaptersDir())
 	if err != nil {
 		return nil, err
 	}
 	byNum := map[int]ChapterFile{}
+	addChapter := func(num int, path, label string, mod time.Time) error {
+		if num <= 0 {
+			return nil
+		}
+		if opts.FromChapter > 0 && num < opts.FromChapter {
+			return nil
+		}
+		if opts.ToChapter > 0 && num > opts.ToChapter {
+			return nil
+		}
+		prev, ok := byNum[num]
+		if ok && !mod.After(fileModTime(prev.Path)) {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		byNum[num] = ChapterFile{Number: num, Path: path, Name: label, Body: string(data)}
+		return nil
+	}
+
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+		if e.IsDir() {
+			num, title := project.ParseChapterDirName(e.Name())
+			if num <= 0 {
+				continue
+			}
+			bodyPath := filepath.Join(p.ChaptersDir(), e.Name(), project.ChapterBodyFile)
+			info, err := os.Stat(bodyPath)
+			if err != nil {
+				continue
+			}
+			label := e.Name()
+			if title != "" {
+				label = fmt.Sprintf("第%03d章-%s", num, title)
+			}
+			if err := addChapter(num, bodyPath, label, info.ModTime()); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if !strings.HasSuffix(e.Name(), ".md") {
 			continue
 		}
 		m := chapterNumRe.FindStringSubmatch(e.Name())
@@ -49,30 +93,16 @@ func ListChapters(p *project.Project, opts Options) ([]ChapterFile, error) {
 		}
 		var num int
 		fmt.Sscanf(m[1], "%d", &num)
-		if num <= 0 {
-			continue
-		}
-		if opts.FromChapter > 0 && num < opts.FromChapter {
-			continue
-		}
-		if opts.ToChapter > 0 && num > opts.ToChapter {
-			continue
-		}
 		path := filepath.Join(p.ChaptersDir(), e.Name())
-		prev, ok := byNum[num]
-		if ok {
-			info, err1 := e.Info()
-			prevInfo, err2 := os.Stat(prev.Path)
-			if err1 == nil && err2 == nil && !info.ModTime().After(prevInfo.ModTime()) {
-				continue
-			}
-		}
-		data, err := os.ReadFile(path)
+		info, err := e.Info()
 		if err != nil {
+			continue
+		}
+		if err := addChapter(num, path, strings.TrimSuffix(e.Name(), ".md"), info.ModTime()); err != nil {
 			return nil, err
 		}
-		byNum[num] = ChapterFile{Number: num, Path: path, Name: e.Name(), Body: string(data)}
 	}
+
 	if len(byNum) == 0 {
 		return nil, fmt.Errorf("无章节可导出")
 	}
@@ -86,6 +116,14 @@ func ListChapters(p *project.Project, opts Options) ([]ChapterFile, error) {
 		out[i] = byNum[n]
 	}
 	return out, nil
+}
+
+func fileModTime(path string) time.Time {
+	info, err := os.Stat(path)
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
 }
 
 // WriteEPUB exports chapters under 正文/ to a minimal EPUB3 file.

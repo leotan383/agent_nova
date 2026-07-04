@@ -36,10 +36,10 @@ type Entry struct {
 
 // Content 百科正文。
 type Content struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Group   string `json:"group"`
-	Kind    string `json:"kind"`
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Group    string `json:"group"`
+	Kind     string `json:"kind"`
 	Body     string `json:"body"`
 	Path     string `json:"path,omitempty"`
 	CanOpen  bool   `json:"can_open"`
@@ -48,25 +48,31 @@ type Content struct {
 
 // List 汇总设定集、大纲、实体与相关记忆。
 func List(p *project.Project, st *store.Store) ([]Entry, error) {
+	_, _ = p.MigrateFlatSettings()
+
 	var entries []Entry
 
 	settingsDir := p.SettingsDir()
-	if settings, err := os.ReadDir(settingsDir); err == nil {
-		for _, e := range settings {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-				continue
-			}
-			title := strings.TrimSuffix(e.Name(), ".md")
-			entries = append(entries, Entry{
-				ID:       settingID(e.Name()),
-				Group:    classifySettingName(title),
-				Title:    title,
-				Subtitle: "设定集",
-				Kind:     KindSetting,
-				Path:     filepath.Join(settingsDir, e.Name()),
-			})
+	_ = filepath.Walk(settingsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
+			return err
 		}
-	}
+		rel, err := filepath.Rel(settingsDir, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		title := strings.TrimSuffix(filepath.Base(path), ".md")
+		entries = append(entries, Entry{
+			ID:       settingID(rel),
+			Group:    project.ClassifySettingRel(rel, title),
+			Title:    title,
+			Subtitle: project.SettingSubtitle(rel),
+			Kind:     KindSetting,
+			Path:     path,
+		})
+		return nil
+	})
 
 	outlineDir := p.OutlineDir()
 	if outlines, err := os.ReadDir(outlineDir); err == nil {
@@ -87,16 +93,30 @@ func List(p *project.Project, st *store.Store) ([]Entry, error) {
 	}
 
 	if st != nil {
-		entities, err := st.SearchEntities("", 200)
+		if _, err := st.MergeDuplicateEntities(); err != nil {
+			return nil, err
+		}
+		entities, err := st.ListEntities("", 500)
 		if err == nil {
+			seen := map[string]struct{}{}
 			for _, e := range entities {
+				typ, canonical := store.EntityCanonicalKey(e)
+				if canonical == "" {
+					continue
+				}
+				dedupeKey := typ + "\x00" + canonical
+				if _, ok := seen[dedupeKey]; ok {
+					continue
+				}
+				seen[dedupeKey] = struct{}{}
+
 				group := GroupSetting
-				subtitle := entityTypeLabel(e.Type)
-				if e.Type == "character" {
+				subtitle := entityTypeLabel(typ)
+				if typ == "character" {
 					group = GroupCharacter
 				}
 				entries = append(entries, Entry{
-					ID: settingEntityID(e.ID), Group: group, Title: e.Name,
+					ID: settingEntityID(store.EntityID(typ, canonical)), Group: group, Title: canonical,
 					Subtitle: subtitle, Kind: KindEntity,
 				})
 			}
@@ -141,14 +161,17 @@ func Get(p *project.Project, st *store.Store, id string) (Content, error) {
 
 	switch kind {
 	case KindSetting:
-		path := filepath.Join(p.SettingsDir(), key)
+		if err := project.ValidateSettingRelPath(key); err != nil {
+			return Content{}, err
+		}
+		path := filepath.Join(p.SettingsDir(), filepath.FromSlash(key))
 		body, err := os.ReadFile(path)
 		if err != nil {
 			return Content{}, err
 		}
-		title := strings.TrimSuffix(key, ".md")
+		title := strings.TrimSuffix(filepath.Base(key), ".md")
 		return Content{
-			ID: id, Title: title, Group: classifySettingName(title),
+			ID: id, Title: title, Group: project.ClassifySettingRel(key, title),
 			Kind: KindSetting, Body: string(body), Path: path, CanOpen: true, Editable: true,
 		}, nil
 	case KindOutline:
@@ -188,33 +211,28 @@ func Get(p *project.Project, st *store.Store, id string) (Content, error) {
 		if st == nil {
 			return Content{}, fmt.Errorf("实体不可用")
 		}
-		entities, err := st.SearchEntities("", 500)
+		e, err := st.FindEntity(key)
 		if err != nil {
 			return Content{}, err
 		}
-		for _, e := range entities {
-			if e.ID != key {
-				continue
-			}
-			group := GroupSetting
-			if e.Type == "character" {
-				group = GroupCharacter
-			}
-			return Content{
-				ID: id, Title: e.Name, Group: group, Kind: KindEntity,
-				Body: formatEntityBody(e), Editable: false,
-			}, nil
+		typ, canonical := store.EntityCanonicalKey(*e)
+		group := GroupSetting
+		if typ == "character" {
+			group = GroupCharacter
 		}
-		return Content{}, fmt.Errorf("实体不存在")
+		return Content{
+			ID: id, Title: canonical, Group: group, Kind: KindEntity,
+			Body: formatEntityBody(*e), Editable: false,
+		}, nil
 	default:
 		return Content{}, fmt.Errorf("未知条目: %s", id)
 	}
 }
 
-func settingID(filename string) string  { return KindSetting + ":" + filename }
-func outlineID(filename string) string  { return KindOutline + ":" + filename }
-func memoryID(id string) string         { return KindMemory + ":" + id }
-func settingEntityID(id string) string  { return KindEntity + ":" + id }
+func settingID(relPath string) string { return KindSetting + ":" + filepath.ToSlash(relPath) }
+func outlineID(filename string) string { return KindOutline + ":" + filename }
+func memoryID(id string) string        { return KindMemory + ":" + id }
+func settingEntityID(id string) string { return KindEntity + ":" + id }
 
 func parseID(id string) (kind, key string, err error) {
 	i := strings.Index(id, ":")
@@ -222,19 +240,6 @@ func parseID(id string) (kind, key string, err error) {
 		return "", "", fmt.Errorf("无效条目 ID: %s", id)
 	}
 	return id[:i], id[i+1:], nil
-}
-
-func classifySettingName(name string) string {
-	switch name {
-	case "主角卡", "反派设计":
-		return GroupCharacter
-	}
-	for _, kw := range []string{"主角", "角色", "人物", "反派", "配角"} {
-		if strings.Contains(name, kw) {
-			return GroupCharacter
-		}
-	}
-	return GroupSetting
 }
 
 func memoryGroup(category string) string {
@@ -266,11 +271,11 @@ func memoryCategoryLabel(category string) string {
 func entityTypeLabel(t string) string {
 	switch t {
 	case "character":
-		return "角色状态"
+		return "AI提取"
 	case "location":
-		return "地点"
+		return "AI提取"
 	case "item":
-		return "物品"
+		return "AI提取"
 	default:
 		return t
 	}
@@ -287,10 +292,14 @@ func Save(p *project.Project, st *store.Store, id, body string) error {
 	}
 	switch kind {
 	case KindSetting:
-		if err := validateMarkdownFilename(key); err != nil {
+		if err := project.ValidateSettingRelPath(key); err != nil {
 			return err
 		}
-		return os.WriteFile(filepath.Join(p.SettingsDir(), key), []byte(body), 0o644)
+		path := filepath.Join(p.SettingsDir(), filepath.FromSlash(key))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(path, []byte(body), 0o644)
 	case KindOutline:
 		if err := validateMarkdownFilename(key); err != nil {
 			return err

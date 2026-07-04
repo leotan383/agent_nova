@@ -24,7 +24,7 @@ func toChapterDocDTO(d chapterdocs.Doc) ChapterDocDTO {
 	}
 }
 
-// GetChapterDocument 读取正文(body)、审查(review)或摘要(summary)。
+// GetChapterDocument 读取正文(body)、审查(review)、摘要(summary)或 AI味(ai_check)。
 func (a *App) GetChapterDocument(chapter int, kind string) (ChapterDocDTO, error) {
 	if chapter <= 0 {
 		return ChapterDocDTO{}, fmt.Errorf("无效章号")

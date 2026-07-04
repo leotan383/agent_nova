@@ -88,6 +88,11 @@ export default function OverviewPanel({
                 第 {Math.max(1, status.current_volume)} 卷 · 已写 {status.chapter_count} 章
                 {status.current_chapter > 0 && ` · 最新第 ${status.current_chapter} 章`}
               </p>
+              {status.synopsis?.trim() && (
+                <p className="mt-3 max-w-2xl text-sm leading-relaxed text-studio-muted/90">
+                  {status.synopsis.trim()}
+                </p>
+              )}
             </div>
             <div className="text-right">
               <p className="text-3xl font-semibold tabular-nums text-studio-accent">{pct.toFixed(1)}%</p>

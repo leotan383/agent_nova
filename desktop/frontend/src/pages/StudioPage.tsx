@@ -10,11 +10,24 @@ import {
   FileText,
   LayoutDashboard,
   Map,
+  MapPin,
+  Package,
+  ScrollText,
   Search,
   Settings,
   ShieldAlert,
+  Swords,
+  Users,
 } from "lucide-react";
-import { ChapterDTO, NovelCard, SearchHitDTO, StatusReport, app, phaseLabel } from "../lib/wails";
+import { ChapterDTO, NovelCard, SearchHitDTO, StatusReport, WikiEntryDTO, app, phaseLabel } from "../lib/wails";
+import {
+  META_SYNOPSIS_ID,
+  SETTING_CATEGORIES,
+  SettingCategory,
+  classifySettingEntry,
+  countByCategory,
+  listSidebarOutlineEntries,
+} from "../lib/wikiCategories";
 import ChaptersPanel, { ChapterDocTab, ChaptersView } from "../components/ChaptersPanel";
 import ConsistencyPanel from "../components/ConsistencyPanel";
 import MemoryPanel, { MemoryFocus } from "../components/MemoryPanel";
@@ -37,6 +50,17 @@ type NavSnapshot = {
   chapterDocTab: ChapterDocTab;
   memoryFocus: MemoryFocus;
   wikiSelectedID: string;
+  wikiCategory: SettingCategory | null;
+  wikiThemeOnly: boolean;
+};
+
+const categoryIcon: Record<SettingCategory, typeof Users> = {
+  角色: Users,
+  背景: BookOpen,
+  势力: Swords,
+  地点: MapPin,
+  物品: Package,
+  其他: ScrollText,
 };
 
 export default function StudioPage() {
@@ -62,6 +86,17 @@ export default function StudioPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [wikiSelectedID, setWikiSelectedID] = useState("");
+  const [wikiCategory, setWikiCategory] = useState<SettingCategory | null>(null);
+  const [wikiThemeOnly, setWikiThemeOnly] = useState(false);
+  const [wikiCounts, setWikiCounts] = useState<Record<SettingCategory, number>>({
+    角色: 0,
+    背景: 0,
+    势力: 0,
+    地点: 0,
+    物品: 0,
+    其他: 0,
+  });
+  const [wikiEntries, setWikiEntries] = useState<WikiEntryDTO[]>([]);
   const [chapterRefreshKey, setChapterRefreshKey] = useState(0);
   const [healthRefreshKey, setHealthRefreshKey] = useState(0);
   const [planFocusVolume, setPlanFocusVolume] = useState<number | null>(null);
@@ -92,7 +127,33 @@ export default function StudioPage() {
     loadStudio();
   }, [loadStudio]);
 
+  const loadWikiMeta = useCallback(async () => {
+    try {
+      const entries = await app().ListWikiEntries();
+      setWikiEntries(entries);
+      setWikiCounts(countByCategory(entries));
+    } catch {
+      /* 侧边栏计数非关键路径 */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeId) void loadWikiMeta();
+  }, [activeId, healthRefreshKey, loadWikiMeta]);
+
   const activeNovel = novels.find((n) => n.id === activeId);
+
+  const resolveWikiNav = (wikiID: string, entries: WikiEntryDTO[]) => {
+    const themeOnly = wikiID === META_SYNOPSIS_ID || wikiID.startsWith("outline:");
+    if (themeOnly) {
+      return { wikiCategory: null as SettingCategory | null, wikiThemeOnly: true };
+    }
+    const entry = entries.find((e) => e.id === wikiID);
+    return {
+      wikiCategory: entry ? classifySettingEntry(entry) : null,
+      wikiThemeOnly: false,
+    };
+  };
 
   const switchNovel = async (id: string) => {
     if (id === activeId) {
@@ -264,6 +325,8 @@ export default function StudioPage() {
     setChapterDocTab(navBeforeSearch.chapterDocTab);
     setMemoryFocus(navBeforeSearch.memoryFocus);
     setWikiSelectedID(navBeforeSearch.wikiSelectedID);
+    setWikiCategory(navBeforeSearch.wikiCategory);
+    setWikiThemeOnly(navBeforeSearch.wikiThemeOnly);
     clearSearchReturn();
   };
 
@@ -278,6 +341,8 @@ export default function StudioPage() {
       chapterDocTab,
       memoryFocus,
       wikiSelectedID,
+      wikiCategory,
+      wikiThemeOnly,
     });
     setSearchHighlightId(hit.id);
 
@@ -288,7 +353,10 @@ export default function StudioPage() {
       case "setting":
       case "entity":
         if (hit.wiki_id) {
+          const nav = resolveWikiNav(hit.wiki_id, wikiEntries);
           setWikiSelectedID(hit.wiki_id);
+          setWikiCategory(nav.wikiCategory);
+          setWikiThemeOnly(nav.wikiThemeOnly);
           setTab("wiki");
         }
         break;
@@ -315,16 +383,129 @@ export default function StudioPage() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
-  const workflowNav = [
-    { id: "overview" as Tab, label: "概览", icon: LayoutDashboard },
-    { id: "planning" as Tab, label: "规划", icon: Map },
-    { id: "chapters" as Tab, label: "章节", icon: FileText },
+  const goToWikiCategory = async (cat: SettingCategory) => {
+    if (tab === "wiki" && wikiCategory === cat && !wikiThemeOnly && !wikiSelectedID) return;
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
+    clearSearchReturn();
+    setWikiCategory(cat);
+    setWikiThemeOnly(false);
+    setWikiSelectedID("");
+    setTab("wiki");
+  };
+
+  const goToWikiEntry = async (wikiID: string) => {
+    const ok = await confirmUnsavedLeave();
+    if (!ok) return;
+    clearSearchReturn();
+    const nav = resolveWikiNav(wikiID, wikiEntries);
+    setWikiSelectedID(wikiID);
+    setWikiCategory(nav.wikiCategory);
+    setWikiThemeOnly(nav.wikiThemeOnly);
+    setTab("wiki");
+  };
+
+  type NavItem = { id: Tab; label: string; icon: typeof LayoutDashboard; hint?: string };
+
+  const outlineEntries = listSidebarOutlineEntries(wikiEntries);
+  const metaNav: NavItem[] = [
+    { id: "memory", label: "记忆", icon: Brain },
+    { id: "consistency", label: "一致性", icon: ShieldAlert },
   ];
-  const referenceNav = [
-    { id: "memory" as Tab, label: "记忆", icon: Brain },
-    { id: "consistency" as Tab, label: "一致性", icon: ShieldAlert },
-    { id: "wiki" as Tab, label: "设定", icon: BookOpen },
-  ];
+
+  const renderNavButton = (item: NavItem, indent = false) => {
+    const Icon = item.icon;
+    const active = tab === item.id;
+    return (
+      <button
+        key={item.id}
+        type="button"
+        onClick={() => void switchTab(item.id)}
+        className={`flex w-full items-center gap-2 rounded-lg py-2 text-sm transition ${
+          indent ? "px-3 pl-7" : "px-3"
+        } ${
+          active
+            ? "bg-studio-accent/15 text-studio-accent"
+            : "text-studio-muted hover:bg-studio-panel hover:text-studio-text"
+        }`}
+        title={item.hint}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className="min-w-0 flex-1 text-left">{item.label}</span>
+      </button>
+    );
+  };
+
+  const renderWikiNavButton = (
+    wikiID: string,
+    label: string,
+    icon: typeof ScrollText,
+    hint?: string,
+  ) => {
+    const Icon = icon;
+    const active = tab === "wiki" && wikiThemeOnly && wikiSelectedID === wikiID;
+    return (
+      <button
+        key={wikiID}
+        type="button"
+        onClick={() => goToWikiEntry(wikiID)}
+        className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
+          active
+            ? "bg-studio-accent/15 text-studio-accent"
+            : "text-studio-muted hover:bg-studio-panel hover:text-studio-text"
+        }`}
+        title={hint}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+      </button>
+    );
+  };
+
+  const renderCreationSection = () => (
+    <div>
+      <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-studio-muted">
+        创作
+      </p>
+      <nav className="space-y-0.5">
+        {renderNavButton({
+          id: "overview",
+          label: "概览",
+          icon: LayoutDashboard,
+          hint: "作品信息与进度",
+        })}
+        {renderNavButton({
+          id: "planning",
+          label: "大纲",
+          icon: Map,
+          hint: "查看与编辑分卷章纲，已写章节后可 Replan",
+        })}
+        {outlineEntries.map((e) =>
+          renderWikiNavButton(
+            e.id,
+            e.title,
+            ScrollText,
+            e.path ? `大纲/${e.title}.md` : undefined,
+          ),
+        )}
+        {renderNavButton({
+          id: "chapters",
+          label: "正文",
+          icon: FileText,
+          hint: "章节正文 / 写章",
+        })}
+      </nav>
+    </div>
+  );
+
+  const renderSection = (title: string, items: NavItem[]) => (
+    <div key={title}>
+      <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-studio-muted">
+        {title}
+      </p>
+      <nav className="space-y-0.5">{items.map((item) => renderNavButton(item))}</nav>
+    </div>
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -379,6 +560,26 @@ export default function StudioPage() {
           {phaseLabel[status?.phase || ""] || status?.phase}
         </span>
 
+        {status && (status.genre || status.style) && (
+          <div className="hidden flex-wrap items-center gap-1.5 md:flex">
+            {status.genre && (
+              <span className="rounded-full bg-studio-panel px-2 py-0.5 text-[11px] text-studio-muted ring-1 ring-studio-border">
+                {status.genre}
+              </span>
+            )}
+            {status.style && (
+              <span className="rounded-full bg-studio-panel px-2 py-0.5 text-[11px] text-studio-muted ring-1 ring-studio-border">
+                {status.style}
+              </span>
+            )}
+            {status.chapter_words_goal > 0 && (
+              <span className="rounded-full bg-studio-panel px-2 py-0.5 text-[11px] text-studio-muted ring-1 ring-studio-border">
+                约 {status.chapter_words_goal} 字/章
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="ml-auto flex items-center gap-3 text-xs text-studio-muted">
           <button
             type="button"
@@ -425,44 +626,42 @@ export default function StudioPage() {
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <aside className="w-52 shrink-0 overflow-y-auto border-r border-studio-border p-4">
-          <nav className="space-y-1">
-            {workflowNav.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => switchTab(id)}
-                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
-                  tab === id
-                    ? "bg-studio-accent/15 text-studio-accent"
-                    : "text-studio-muted hover:bg-studio-panel hover:text-studio-text"
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            ))}
-          </nav>
-          <div className="my-3 border-t border-studio-border/60" />
-          <p className="mb-2 px-3 text-[10px] font-medium uppercase tracking-wide text-studio-muted/60">资料</p>
-          <nav className="space-y-1">
-            {referenceNav.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => switchTab(id)}
-                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
-                  tab === id
-                    ? "bg-studio-accent/15 text-studio-accent"
-                    : "text-studio-muted hover:bg-studio-panel hover:text-studio-text"
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            ))}
-          </nav>
-          <p className="mt-8 px-3 text-xs leading-relaxed text-studio-muted">
-            章节页可 AI 写章、阅读改稿；记忆与设定供查阅世界观。
+          <div className="space-y-4">
+            {renderCreationSection()}
+            <div>
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-studio-muted">
+                设定
+              </p>
+              <nav className="space-y-0.5">
+                {SETTING_CATEGORIES.map((cat) => {
+                  const Icon = categoryIcon[cat];
+                  const count = wikiCounts[cat];
+                  const active = tab === "wiki" && wikiCategory === cat && !wikiThemeOnly;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => void goToWikiCategory(cat)}
+                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
+                        active
+                          ? "bg-studio-accent/15 text-studio-accent"
+                          : "text-studio-muted hover:bg-studio-panel hover:text-studio-text"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 flex-1 text-left">{cat}</span>
+                      {count > 0 && (
+                        <span className="text-xs tabular-nums text-studio-muted/70">({count})</span>
+                      )}
+                    </button>
+                  );
+                })}
+                {metaNav.map((item) => renderNavButton(item))}
+              </nav>
+            </div>
+          </div>
+          <p className="mt-6 px-3 text-[11px] leading-relaxed text-studio-muted/80">
+            创作：概览、大纲与正文；设定：角色、背景等分类与记忆。
           </p>
         </aside>
 
@@ -570,10 +769,7 @@ export default function StudioPage() {
               <ConsistencyPanel
                 refreshKey={healthRefreshKey}
                 currentChapter={status?.current_chapter ?? 0}
-                onGoToWiki={(wikiID) => {
-                  setWikiSelectedID(wikiID);
-                  setTab("wiki");
-                }}
+                onGoToWiki={(wikiID) => void goToWikiEntry(wikiID)}
                 onResolved={() => {
                   setHealthRefreshKey((k) => k + 1);
                   loadStudio();
@@ -584,7 +780,12 @@ export default function StudioPage() {
 
           {tab === "wiki" && (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <WikiPanel initialSelectedID={wikiSelectedID} />
+              <WikiPanel
+                status={status}
+                initialSelectedID={wikiSelectedID}
+                categoryFilter={wikiThemeOnly ? null : wikiCategory}
+                themeOnly={wikiThemeOnly}
+              />
             </div>
           )}
         </main>

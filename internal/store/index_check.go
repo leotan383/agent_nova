@@ -3,11 +3,12 @@ package store
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
-// CheckIndexStale compares 正文/*.md files against chapters table and FTS row counts.
+// CheckIndexStale compares 正文目录与 chapters 表、FTS 是否一致（支持按章子目录）。
 func (s *Store) CheckIndexStale(chaptersDir string) IndexStaleReport {
 	rep := IndexStaleReport{}
 	entries, err := os.ReadDir(chaptersDir)
@@ -19,7 +20,20 @@ func (s *Store) CheckIndexStale(chaptersDir string) IndexStaleReport {
 	fileNums := map[int]struct{}{}
 	rawFiles := 0
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+		if e.IsDir() {
+			num := parseChapterNumFromName(e.Name())
+			if num <= 0 {
+				continue
+			}
+			bodyPath := filepath.Join(chaptersDir, e.Name(), "正文.md")
+			if _, err := os.Stat(bodyPath); err != nil {
+				continue
+			}
+			rawFiles++
+			fileNums[num] = struct{}{}
+			continue
+		}
+		if !strings.HasSuffix(e.Name(), ".md") {
 			continue
 		}
 		num := parseChapterNumFromName(e.Name())

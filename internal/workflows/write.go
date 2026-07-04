@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -159,10 +160,11 @@ func (w *WriteWorkflow) WriteChapter(ctx context.Context, p *project.Project, st
 			return nil, err
 		}
 
-		// 保存完整审查报告到审查目录
-		_ = os.MkdirAll(p.ReviewsDir(), 0o755)
-		_ = os.WriteFile(p.ReviewPath(opts.Chapter), []byte(reviewed), 0o644)
-		persistReviewRecord(st, opts.Chapter, p.ReviewPath(opts.Chapter), reviewed)
+		// 保存完整审查报告到章节目录
+		reviewPath := p.ReviewPath(opts.Chapter)
+		_ = os.MkdirAll(filepath.Dir(reviewPath), 0o755)
+		_ = os.WriteFile(reviewPath, []byte(reviewed), 0o644)
+		persistReviewRecord(st, opts.Chapter, reviewPath, reviewed)
 
 		// 提取润色版全文写回正文
 		ledger.Record("review", "done", "ok")
@@ -236,76 +238,6 @@ func loadChapterFile(p *project.Project, chapter int) (path, content string) {
 		return path, ""
 	}
 	return path, string(data)
-}
-
-func extractPolishedBody(reviewed, fallback string) string {
-	markers := []string{"润色版全文", "润色版正文", "润色版", "修订版全文", "修订后正文", "## 润色版正文", "## 润色", "## 润色后正文"}
-	for _, m := range markers {
-		if idx := strings.Index(reviewed, m); idx >= 0 {
-			body := strings.TrimSpace(reviewed[idx+len(m):])
-			body = strings.TrimLeft(body, "：:\n")
-			if utf8.RuneCountInString(body) > 200 {
-				return stripReviewMetricsSuffix(body)
-			}
-		}
-	}
-	if idx := findChapterHeadingStart(reviewed); idx >= 0 {
-		body := strings.TrimSpace(reviewed[idx:])
-		if utf8.RuneCountInString(body) > 200 {
-			return stripReviewMetricsSuffix(body)
-		}
-	}
-	if parts := strings.Split(reviewed, "\n---\n"); len(parts) >= 2 {
-		last := strings.TrimSpace(parts[len(parts)-1])
-		if utf8.RuneCountInString(last) > 200 {
-			return stripReviewMetricsSuffix(last)
-		}
-	}
-	return fallback
-}
-
-func stripReviewMetricsSuffix(body string) string {
-	body = strings.TrimRight(body, " \t\r\n")
-	if idx := strings.LastIndex(body, "```json"); idx >= 0 {
-		tail := body[idx:]
-		if end := strings.LastIndex(tail, "```"); end > 7 {
-			jsonRaw, err := agent.ExtractJSONBlock(tail)
-			if err == nil && strings.Contains(jsonRaw, "hook_score") {
-				return strings.TrimRight(body[:idx], " \t\r\n")
-			}
-		}
-	}
-	hookIdx := strings.LastIndex(body, `"hook_score"`)
-	if hookIdx < 0 {
-		return body
-	}
-	objStart := strings.LastIndex(body[:hookIdx], "{")
-	objEnd := strings.LastIndex(body, "}")
-	if objStart < 0 || objEnd <= objStart {
-		return body
-	}
-	candidate := body[objStart : objEnd+1]
-	var m map[string]any
-	if err := json.Unmarshal([]byte(candidate), &m); err != nil {
-		return body
-	}
-	if _, ok := m["hook_score"]; !ok {
-		return body
-	}
-	return strings.TrimRight(body[:objStart], " \t\r\n")
-}
-
-func findChapterHeadingStart(s string) int {
-	lines := strings.Split(s, "\n")
-	pos := 0
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "#") && strings.Contains(trimmed, "章") {
-			return pos
-		}
-		pos += len(line) + 1
-	}
-	return -1
 }
 
 type ReviewWorkflow struct {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/tanlian/agent_nova/internal/app"
+	"github.com/tanlian/agent_nova/internal/project"
 	"github.com/tanlian/agent_nova/internal/wiki"
 )
 
@@ -97,4 +98,42 @@ func (a *App) SaveWikiContent(id, body string) error {
 	return a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
 		return wiki.Save(actx.Project, actx.Store, id, body)
 	})
+}
+
+// CreateWikiSettingInput 新建设定文档。
+type CreateWikiSettingInput struct {
+	Category     string `json:"category"`      // 角色|背景|势力|地点|物品|其他
+	Title        string `json:"title"`         // 文件名（不含 .md）
+	TemplateKind string `json:"template_kind"` // character|villain|blank
+}
+
+// CreateWikiSetting 在设定集对应子目录创建 Markdown 并返回新条目。
+func (a *App) CreateWikiSetting(in CreateWikiSettingInput) (WikiContentDTO, error) {
+	subdir, ok := categoryToSubdir[in.Category]
+	if !ok || in.Category == "" {
+		return WikiContentDTO{}, fmt.Errorf("无效设定分类")
+	}
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return WikiContentDTO{}, err
+	}
+	var result WikiContentDTO
+	err = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		content, createErr := wiki.CreateSetting(actx.Project, actx.Store, subdir, in.Title, in.TemplateKind)
+		if createErr != nil {
+			return createErr
+		}
+		result = toWikiContentDTO(content)
+		return nil
+	})
+	return result, err
+}
+
+var categoryToSubdir = map[string]string{
+	"角色": project.SettingsSubCharacter,
+	"背景": project.SettingsSubWorld,
+	"势力": project.SettingsSubFaction,
+	"地点": project.SettingsSubLocation,
+	"物品": project.SettingsSubItem,
+	"其他": project.SettingsSubOther,
 }

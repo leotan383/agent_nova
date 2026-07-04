@@ -193,6 +193,15 @@ CREATE TABLE IF NOT EXISTS cool_points (
   delivered INTEGER          -- 0|1
 );
 
+-- entity_state_history: 实体状态历史快照（每章一条，供时间线展示）
+CREATE TABLE IF NOT EXISTS entity_state_history (
+  entity_id TEXT NOT NULL,
+  chapter INTEGER NOT NULL,
+  state_json TEXT NOT NULL,
+  recorded_at TEXT NOT NULL,
+  PRIMARY KEY (entity_id, chapter)
+);
+
 -- embeddings: 向量索引（OpenAI embedding），供语义检索
 CREATE TABLE IF NOT EXISTS embeddings (
   id TEXT PRIMARY KEY,
@@ -270,7 +279,7 @@ func (s *Store) GetChapter(n int) (*Chapter, error) {
 	return &ch, nil
 }
 
-// SetChapterStatus 手动设置章节发布状态（published / scheduled / reviewed / draft）。
+// SetChapterStatus 手动设置章节发布状态（published / reviewed / draft）。
 func (s *Store) SetChapterStatus(number int, status string) error {
 	ch, err := s.GetChapter(number)
 	if err != nil {

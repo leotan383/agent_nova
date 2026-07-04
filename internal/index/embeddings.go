@@ -17,20 +17,19 @@ func (idx *Indexer) RebuildEmbeddings(ctx context.Context, cfg *config.Config) (
 	}
 	ragIdx := rag.NewIndexer(cfg)
 	count := 0
-	entries, err := os.ReadDir(idx.proj.ChaptersDir())
+	nums, err := idx.proj.ListChapterNumbers()
 	if err != nil {
 		return 0, err
 	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+	for _, num := range nums {
+		path, _, err := idx.proj.FindChapterFile(num)
+		if err != nil {
 			continue
 		}
-		path := filepath.Join(idx.proj.ChaptersDir(), e.Name())
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return count, err
 		}
-		num := parseChapterNum(e.Name())
 		ref := fmt.Sprintf("%d", num)
 		if err := ragIdx.IndexText(ctx, idx.store, "chapter", ref, string(data)); err != nil {
 			return count, err

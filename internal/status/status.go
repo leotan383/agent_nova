@@ -11,6 +11,8 @@ import (
 type Report struct {
 	Phase           string   `json:"phase"`
 	Title           string   `json:"title"`
+	Genre           string   `json:"genre"`
+	Synopsis        string   `json:"synopsis,omitempty"`
 	CurrentVolume   int      `json:"current_volume"`
 	CurrentChapter  int      `json:"current_chapter"`
 	ChapterCount    int      `json:"chapter_count"`
@@ -25,6 +27,8 @@ func Build(p *project.Project, st *store.Store, focus string) Report {
 	r := Report{
 		Phase:          p.Meta.Phase,
 		Title:          p.Meta.Title,
+		Genre:          p.Meta.Genre,
+		Synopsis:       p.Meta.Synopsis,
 		CurrentVolume:  p.Meta.CurrentVolume,
 		CurrentChapter: p.Meta.CurrentChapter,
 	}

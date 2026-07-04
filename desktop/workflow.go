@@ -55,7 +55,7 @@ type SetChapterStatusInput struct {
 }
 
 var allowedChapterStatuses = map[string]bool{
-	"draft": true, "reviewed": true, "published": true, "scheduled": true,
+	"draft": true, "reviewed": true, "published": true,
 }
 
 func toDailyWorkflowDTO(r workflow.DailyReport) DailyWorkflowDTO {
