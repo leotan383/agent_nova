@@ -188,7 +188,7 @@ export default function DailyWorkflowCard({
 
       <div className="grid gap-4 px-5 py-4 sm:grid-cols-3">
         <div>
-          <p className="text-[10px] font-medium uppercase tracking-wide text-studio-muted">今日进度</p>
+          <p className="text-[11px] text-studio-muted">今日进度</p>
           <p className="mt-1 text-lg font-semibold tabular-nums">
             {data.today_chapters}/{data.today_chapters_goal} 章
           </p>
@@ -204,7 +204,7 @@ export default function DailyWorkflowCard({
         </div>
 
         <div>
-          <p className="text-[10px] font-medium uppercase tracking-wide text-studio-muted">连续写作</p>
+          <p className="text-[11px] text-studio-muted">连续写作</p>
           <div className="mt-1 flex items-baseline gap-2">
             <Flame className="h-5 w-5 text-orange-400" />
             <span className="text-2xl font-semibold tabular-nums">{data.current_streak}</span>
@@ -229,7 +229,7 @@ export default function DailyWorkflowCard({
         </div>
 
         <div>
-          <p className="text-[10px] font-medium uppercase tracking-wide text-studio-muted">存稿缓冲</p>
+          <p className="text-[11px] text-studio-muted">存稿缓冲</p>
           <p className={`mt-1 text-lg font-semibold tabular-nums ${data.buffer_ok ? "text-[rgb(var(--studio-diff-add-stat))]" : ""}`}>
             {data.buffer_ready} / {data.buffer_target} 章
           </p>
@@ -246,7 +246,7 @@ export default function DailyWorkflowCard({
 
       {data.suggestions.length > 0 && (
         <div className="border-t border-studio-border/60 px-5 py-3">
-          <p className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-studio-muted">
+          <p className="mb-2 flex items-center gap-1.5 text-[11px] text-studio-muted">
             <Calendar className="h-3 w-3" />
             今日建议
           </p>

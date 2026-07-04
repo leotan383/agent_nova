@@ -17,9 +17,11 @@ import {
 type Props = {
   refreshKey?: number;
   onRefresh?: () => void;
+  /** 嵌入折叠面板时去掉外层卡片样式 */
+  embedded?: boolean;
 };
 
-export default function ProjectToolsCard({ refreshKey = 0, onRefresh }: Props) {
+export default function ProjectToolsCard({ refreshKey = 0, onRefresh, embedded = false }: Props) {
   const [backups, setBackups] = useState<BackupItemDTO[]>([]);
   const [loadingBackups, setLoadingBackups] = useState(true);
   const [busy, setBusy] = useState("");
@@ -105,8 +107,10 @@ export default function ProjectToolsCard({ refreshKey = 0, onRefresh }: Props) {
   };
 
   return (
-    <div className="rounded-xl border border-studio-border bg-studio-panel p-4">
-      <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-studio-muted">项目工具</h3>
+    <div className={embedded ? "" : "rounded-xl border border-studio-border bg-studio-panel p-4"}>
+      {!embedded && (
+        <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-studio-muted">项目工具</h3>
+      )}
       {error && <div className="mb-3 studio-alert-error-compact text-xs">{error}</div>}
 
       <div className="flex flex-wrap gap-2">
