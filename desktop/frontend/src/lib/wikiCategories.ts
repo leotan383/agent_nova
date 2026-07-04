@@ -1,28 +1,38 @@
-import { WikiEntryDTO } from "./wails";
+import { SettingCategoryDTO, WikiEntryDTO } from "./wails";
 
-export const SETTING_CATEGORIES = ["角色", "背景", "势力", "地点", "物品", "其他"] as const;
-export type SettingCategory = (typeof SETTING_CATEGORIES)[number];
+/** 设定分类 id（内置或用户自定义） */
+export type SettingCategory = string;
+
+export const HIDDEN_SETTING_CATEGORY = "其他";
 
 export const META_SYNOPSIS_ID = "meta:synopsis";
 
-/** UI 分类 → 设定集子目录 */
-export const CATEGORY_TO_SUBDIR: Record<SettingCategory, string> = {
+const LEGACY_SUBDIR_TO_CATEGORY: Record<string, string> = {
   角色: "角色",
-  背景: "世界",
+  世界: "世界观",
   势力: "势力",
   地点: "地点",
   物品: "物品",
-  其他: "其他",
+  其他: HIDDEN_SETTING_CATEGORY,
 };
 
-const SUBDIR_TO_CATEGORY: Record<string, SettingCategory> = {
-  角色: "角色",
-  世界: "背景",
-  势力: "势力",
-  地点: "地点",
-  物品: "物品",
-  其他: "其他",
-};
+/** 由 API 分类列表构建 子目录 → 分类 id */
+export function buildSubdirToCategory(categories: SettingCategoryDTO[]): Record<string, string> {
+  const map: Record<string, string> = { ...LEGACY_SUBDIR_TO_CATEGORY };
+  for (const c of categories) {
+    map[c.subdir] = c.id;
+  }
+  return map;
+}
+
+/** 由 API 分类列表构建 分类 id → 子目录 */
+export function buildCategoryToSubdir(categories: SettingCategoryDTO[]): Record<string, string> {
+  const map: Record<string, string> = { [HIDDEN_SETTING_CATEGORY]: "其他" };
+  for (const c of categories) {
+    map[c.id] = c.subdir;
+  }
+  return map;
+}
 
 export function settingRelFromID(id: string): string | null {
   if (!id.startsWith("setting:")) return null;
@@ -36,11 +46,14 @@ export function parseEntityTypeFromWikiID(id: string): string | null {
   return colon >= 0 ? rest.slice(0, colon) : rest;
 }
 
-export function classifySettingEntry(e: WikiEntryDTO): SettingCategory {
+export function classifySettingEntry(
+  e: WikiEntryDTO,
+  subdirToCategory: Record<string, string>,
+): SettingCategory {
   const rel = settingRelFromID(e.id);
   if (rel) {
     const sub = rel.split("/")[0];
-    if (SUBDIR_TO_CATEGORY[sub]) return SUBDIR_TO_CATEGORY[sub];
+    if (subdirToCategory[sub]) return subdirToCategory[sub];
   }
   if (e.group === "人物") return "角色";
   if (e.kind === "entity") {
@@ -51,35 +64,38 @@ export function classifySettingEntry(e: WikiEntryDTO): SettingCategory {
   }
   const title = e.title;
   if (["世界观", "背景", "力量", "科技", "体系", "设定"].some((k) => title.includes(k))) {
-    return "背景";
+    return "世界观";
   }
   if (title.includes("势力")) return "势力";
   if (["主角", "角色", "人物", "反派", "配角"].some((k) => title.includes(k))) {
     return "角色";
   }
-  return "其他";
+  return HIDDEN_SETTING_CATEGORY;
 }
 
-export function countByCategory(entries: WikiEntryDTO[]): Record<SettingCategory, number> {
-  const counts: Record<SettingCategory, number> = {
-    角色: 0,
-    背景: 0,
-    势力: 0,
-    地点: 0,
-    物品: 0,
-    其他: 0,
-  };
+export function countByCategory(
+  entries: WikiEntryDTO[],
+  categories: SettingCategoryDTO[],
+): Record<string, number> {
+  const subdirToCategory = buildSubdirToCategory(categories);
+  const counts: Record<string, number> = {};
+  for (const c of categories) counts[c.id] = 0;
   for (const e of entries) {
     if (e.group === "大纲" || e.kind === "outline") continue;
-    counts[classifySettingEntry(e)]++;
+    const cat = classifySettingEntry(e, subdirToCategory);
+    if (cat in counts) counts[cat]++;
   }
   return counts;
 }
 
-export function filterByCategory(entries: WikiEntryDTO[], category: SettingCategory): WikiEntryDTO[] {
+export function filterByCategory(
+  entries: WikiEntryDTO[],
+  category: SettingCategory,
+  subdirToCategory: Record<string, string>,
+): WikiEntryDTO[] {
   return entries.filter((e) => {
     if (e.group === "大纲" || e.kind === "outline") return false;
-    return classifySettingEntry(e) === category;
+    return classifySettingEntry(e, subdirToCategory) === category;
   });
 }
 
@@ -91,14 +107,12 @@ export function sortOutlineEntries(items: WikiEntryDTO[]) {
   });
 }
 
-/** 大纲目录下的 Markdown 条目（不含简介 meta） */
 export function listOutlineEntries(entries: WikiEntryDTO[]): WikiEntryDTO[] {
   return sortOutlineEntries(
     entries.filter((e) => e.kind === "outline" || e.group === "大纲"),
   );
 }
 
-/** 侧边栏「大纲」下展示的条目：隐藏总纲、卷纲、爽点规划（卷纲由卷纲规划页管理） */
 export function isVolumeOutlineTitle(title: string): boolean {
   return /^第\s*\d+\s*卷/u.test(title.trim());
 }
@@ -112,12 +126,13 @@ export function listSidebarOutlineEntries(entries: WikiEntryDTO[]): WikiEntryDTO
   });
 }
 
-/** 解析设定集某分类的磁盘目录（用于新建文件） */
 export function resolveSettingsCategoryDir(
   entries: WikiEntryDTO[],
   category: SettingCategory,
+  categoryToSubdir: Record<string, string>,
 ): string {
-  const sub = CATEGORY_TO_SUBDIR[category];
+  const sub = categoryToSubdir[category];
+  if (!sub) return "";
   const hit = entries.find((e) => {
     if (e.kind !== "setting" || !e.path) return false;
     return e.path.replace(/\\/g, "/").includes(`/设定集/${sub}/`);
@@ -143,9 +158,34 @@ export function resolveSettingsCategoryDir(
   return `${root}${sep}${sub}`;
 }
 
-export function splitCategoryEntries(entries: WikiEntryDTO[], category: SettingCategory) {
-  const filtered = filterByCategory(entries, category);
+export function splitCategoryEntries(
+  entries: WikiEntryDTO[],
+  category: SettingCategory,
+  subdirToCategory: Record<string, string>,
+) {
+  const filtered = filterByCategory(entries, category, subdirToCategory);
   const archives = filtered.filter((e) => e.kind === "setting");
   const states = filtered.filter((e) => e.kind === "entity");
   return { archives, states };
+}
+
+export function categoryLabel(
+  categoryId: string,
+  categories: SettingCategoryDTO[],
+): string {
+  return categories.find((c) => c.id === categoryId)?.label ?? categoryId;
+}
+
+export function categorySubdir(
+  categoryId: string,
+  categories: SettingCategoryDTO[],
+): string {
+  return buildCategoryToSubdir(categories)[categoryId] ?? categoryId;
+}
+
+export function isBuiltinCategory(
+  categoryId: string,
+  categories: SettingCategoryDTO[],
+): boolean {
+  return categories.find((c) => c.id === categoryId)?.builtin ?? false;
 }

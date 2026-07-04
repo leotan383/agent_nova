@@ -633,6 +633,11 @@ func (s *Store) IndexSettingFTS(path, content string) error {
 	return err
 }
 
+func (s *Store) DeleteSettingFTS(path string) error {
+	_, err := s.db.Exec(`DELETE FROM settings_fts WHERE file_path=?`, path)
+	return err
+}
+
 func (s *Store) SearchFTS(query string, limit int) ([]map[string]string, error) {
 	if limit <= 0 {
 		limit = 10

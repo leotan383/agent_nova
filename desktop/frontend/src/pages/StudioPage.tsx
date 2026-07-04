@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   BookMarked,
-  BookOpen,
   Brain,
   ChevronDown,
   Download,
@@ -11,23 +10,26 @@ import {
   GitBranch,
   LayoutDashboard,
   Map,
-  MapPin,
-  Package,
+  Pencil,
+  Plus,
   ScrollText,
   Search,
   Settings,
-  Swords,
-  Users,
+  Trash2,
 } from "lucide-react";
-import { ChapterDTO, NovelCard, SearchHitDTO, StatusReport, WikiEntryDTO, app, phaseLabel } from "../lib/wails";
+import { ChapterDTO, NovelCard, SearchHitDTO, SettingCategoryDTO, StatusReport, WikiEntryDTO, app, phaseLabel } from "../lib/wails";
 import {
   META_SYNOPSIS_ID,
-  SETTING_CATEGORIES,
   SettingCategory,
+  buildSubdirToCategory,
   classifySettingEntry,
   countByCategory,
   listSidebarOutlineEntries,
 } from "../lib/wikiCategories";
+import { settingCategoryIcon } from "../lib/settingCategoryIcons";
+import CreateCategoryDialog from "../components/CreateCategoryDialog";
+import CreateSettingDialog from "../components/CreateSettingDialog";
+import ConfirmDialog from "../components/ConfirmDialog";
 import ChaptersPanel, { ChapterDocTab, ChaptersView } from "../components/ChaptersPanel";
 import ForeshadowPanel, { ForeshadowFocus } from "../components/ForeshadowPanel";
 import MemoryPanel, { MemoryFocus } from "../components/MemoryPanel";
@@ -55,14 +57,13 @@ type NavSnapshot = {
   wikiThemeOnly: boolean;
 };
 
-const categoryIcon: Record<SettingCategory, typeof Users> = {
-  角色: Users,
-  背景: BookOpen,
-  势力: Swords,
-  地点: MapPin,
-  物品: Package,
-  其他: ScrollText,
-};
+const defaultSettingCategories: SettingCategoryDTO[] = [
+  { id: "角色", label: "角色", subdir: "角色", builtin: true },
+  { id: "世界观", label: "世界观", subdir: "世界", builtin: true },
+  { id: "势力", label: "势力", subdir: "势力", builtin: true },
+  { id: "地点", label: "地点", subdir: "地点", builtin: true },
+  { id: "物品", label: "物品", subdir: "物品", builtin: true },
+];
 
 export default function StudioPage() {
   const navigate = useNavigate();
@@ -90,19 +91,19 @@ export default function StudioPage() {
   const [wikiSelectedID, setWikiSelectedID] = useState("");
   const [wikiCategory, setWikiCategory] = useState<SettingCategory | null>(null);
   const [wikiThemeOnly, setWikiThemeOnly] = useState(false);
-  const [wikiCounts, setWikiCounts] = useState<Record<SettingCategory, number>>({
-    角色: 0,
-    背景: 0,
-    势力: 0,
-    地点: 0,
-    物品: 0,
-    其他: 0,
-  });
+  const [settingCategories, setSettingCategories] = useState<SettingCategoryDTO[]>(defaultSettingCategories);
+  const [wikiCounts, setWikiCounts] = useState<Record<string, number>>({});
   const [wikiEntries, setWikiEntries] = useState<WikiEntryDTO[]>([]);
   const [chapterRefreshKey, setChapterRefreshKey] = useState(0);
   const [healthRefreshKey, setHealthRefreshKey] = useState(0);
   const [planFocusVolume, setPlanFocusVolume] = useState<number | null>(null);
   const [autoReviewChapter, setAutoReviewChapter] = useState<number | null>(null);
+  const [createSettingOpen, setCreateSettingOpen] = useState(false);
+  const [createSettingCategory, setCreateSettingCategory] = useState<SettingCategory>("角色");
+  const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
+  const [renameCategoryId, setRenameCategoryId] = useState("");
+  const [renameCategoryOpen, setRenameCategoryOpen] = useState(false);
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<SettingCategoryDTO | null>(null);
 
   const loadStudio = useCallback(async () => {
     setError("");
@@ -131,9 +132,13 @@ export default function StudioPage() {
 
   const loadWikiMeta = useCallback(async () => {
     try {
-      const entries = await app().ListWikiEntries();
+      const [entries, categories] = await Promise.all([
+        app().ListWikiEntries(),
+        app().ListSettingCategories(),
+      ]);
       setWikiEntries(entries);
-      setWikiCounts(countByCategory(entries));
+      setSettingCategories(categories.length > 0 ? categories : defaultSettingCategories);
+      setWikiCounts(countByCategory(entries, categories.length > 0 ? categories : defaultSettingCategories));
     } catch {
       /* 侧边栏计数非关键路径 */
     }
@@ -145,14 +150,15 @@ export default function StudioPage() {
 
   const activeNovel = novels.find((n) => n.id === activeId);
 
-  const resolveWikiNav = (wikiID: string, entries: WikiEntryDTO[]) => {
+  const resolveWikiNav = (wikiID: string, entries: WikiEntryDTO[], categories: SettingCategoryDTO[]) => {
+    const subdirMap = buildSubdirToCategory(categories);
     const themeOnly = wikiID === META_SYNOPSIS_ID || wikiID.startsWith("outline:");
     if (themeOnly) {
       return { wikiCategory: null as SettingCategory | null, wikiThemeOnly: true };
     }
     const entry = entries.find((e) => e.id === wikiID);
     return {
-      wikiCategory: entry ? classifySettingEntry(entry) : null,
+      wikiCategory: entry ? classifySettingEntry(entry, subdirMap) : null,
       wikiThemeOnly: false,
     };
   };
@@ -357,7 +363,7 @@ export default function StudioPage() {
       case "setting":
       case "entity":
         if (hit.wiki_id) {
-          const nav = resolveWikiNav(hit.wiki_id, wikiEntries);
+          const nav = resolveWikiNav(hit.wiki_id, wikiEntries, settingCategories);
           setWikiSelectedID(hit.wiki_id);
           setWikiCategory(nav.wikiCategory);
           setWikiThemeOnly(nav.wikiThemeOnly);
@@ -402,7 +408,7 @@ export default function StudioPage() {
     const ok = await confirmUnsavedLeave();
     if (!ok) return;
     clearSearchReturn();
-    const nav = resolveWikiNav(wikiID, wikiEntries);
+    const nav = resolveWikiNav(wikiID, wikiEntries, settingCategories);
     setWikiSelectedID(wikiID);
     setWikiCategory(nav.wikiCategory);
     setWikiThemeOnly(nav.wikiThemeOnly);
@@ -410,6 +416,51 @@ export default function StudioPage() {
   };
 
   type NavItem = { id: Tab; label: string; icon: typeof LayoutDashboard; hint?: string };
+
+  const openCreateSettingFor = (cat: SettingCategory) => {
+    setCreateSettingCategory(cat);
+    setCreateSettingOpen(true);
+  };
+
+  const handleSettingCreated = async (id: string) => {
+    setCreateSettingOpen(false);
+    await loadWikiMeta();
+    await goToWikiEntry(id);
+  };
+
+  const handleCategoryCreated = async (categoryId: string) => {
+    setCreateCategoryOpen(false);
+    await loadWikiMeta();
+    await goToWikiCategory(categoryId);
+  };
+
+  const handleCategoryRenamed = async (categoryId: string) => {
+    const oldId = renameCategoryId;
+    setRenameCategoryOpen(false);
+    setRenameCategoryId("");
+    await loadWikiMeta();
+    if (wikiCategory === oldId) {
+      setWikiCategory(categoryId);
+    }
+    await goToWikiCategory(categoryId);
+  };
+
+  const confirmDeleteCategory = async () => {
+    if (!deleteCategoryTarget) return;
+    const targetId = deleteCategoryTarget.id;
+    try {
+      await app().DeleteSettingCategory(targetId);
+      setDeleteCategoryTarget(null);
+      if (wikiCategory === targetId) {
+        setWikiCategory(null);
+        setWikiSelectedID("");
+        if (tab === "wiki") setTab("overview");
+      }
+      await loadWikiMeta();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const outlineEntries = listSidebarOutlineEntries(wikiEntries);
   const metaNav: NavItem[] = [
@@ -652,31 +703,74 @@ export default function StudioPage() {
           <div className="space-y-4">
             {renderCreationSection()}
             <div>
-              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-studio-muted">
-                设定
-              </p>
+              <div className="mb-1.5 flex items-center justify-between px-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-studio-muted">
+                  设定
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setCreateCategoryOpen(true)}
+                  className="rounded-md p-1 text-studio-muted transition hover:bg-studio-panel hover:text-studio-accent"
+                  title="新建设定分类"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
               <nav className="space-y-0.5">
-                {SETTING_CATEGORIES.map((cat) => {
-                  const Icon = categoryIcon[cat];
-                  const count = wikiCounts[cat];
-                  const active = tab === "wiki" && wikiCategory === cat && !wikiThemeOnly;
+                {settingCategories.map((cat) => {
+                  const Icon = settingCategoryIcon(cat.id);
+                  const count = wikiCounts[cat.id] ?? 0;
+                  const active = tab === "wiki" && wikiCategory === cat.id && !wikiThemeOnly;
                   return (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => void goToWikiCategory(cat)}
-                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
-                        active
-                          ? "bg-studio-accent/15 text-studio-accent"
-                          : "text-studio-muted hover:bg-studio-panel hover:text-studio-text"
-                      }`}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 flex-1 text-left">{cat}</span>
-                      {count > 0 && (
-                        <span className="text-xs tabular-nums text-studio-muted/70">({count})</span>
+                    <div key={cat.id} className="group flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => void goToWikiCategory(cat.id)}
+                        className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
+                          active
+                            ? "bg-studio-accent/15 text-studio-accent"
+                            : "text-studio-muted hover:bg-studio-panel hover:text-studio-text"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate text-left">{cat.label}</span>
+                        {count > 0 && (
+                          <span className="text-xs tabular-nums text-studio-muted/70">({count})</span>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openCreateSettingFor(cat.id)}
+                        className="shrink-0 rounded-md p-1 text-studio-muted opacity-0 transition hover:bg-studio-panel hover:text-studio-accent group-hover:opacity-100"
+                        title={`新建${cat.label}设定`}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                      {!cat.builtin && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRenameCategoryId(cat.id);
+                              setRenameCategoryOpen(true);
+                            }}
+                            className="shrink-0 rounded-md p-1 text-studio-muted opacity-0 transition hover:bg-studio-panel hover:text-studio-text group-hover:opacity-100"
+                            title={`重命名「${cat.label}」`}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteCategoryTarget(cat)}
+                            className="shrink-0 rounded-md p-1 text-studio-muted opacity-0 transition hover:bg-[rgb(var(--studio-danger-bg))] hover:text-[rgb(var(--studio-danger-fg))] group-hover:opacity-100"
+                            title={`删除「${cat.label}」`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </nav>
@@ -684,7 +778,7 @@ export default function StudioPage() {
             {renderStateSection()}
           </div>
           <p className="mt-6 px-3 text-[11px] leading-relaxed text-studio-muted/80">
-            创作：概览、大纲与正文；设定：角色、背景等分类；状态：记忆与伏笔。
+            创作：概览、大纲与正文；设定：角色、世界观等分类；状态：记忆与伏笔。
           </p>
         </aside>
 
@@ -802,6 +896,7 @@ export default function StudioPage() {
               <WikiPanel
                 status={status}
                 initialSelectedID={wikiSelectedID}
+                settingCategories={settingCategories}
                 categoryFilter={wikiThemeOnly ? null : wikiCategory}
                 themeOnly={wikiThemeOnly}
               />
@@ -810,6 +905,46 @@ export default function StudioPage() {
         </main>
       </div>
 
+      <CreateSettingDialog
+        open={createSettingOpen}
+        category={createSettingCategory}
+        categories={settingCategories}
+        onClose={() => setCreateSettingOpen(false)}
+        onCreated={(id) => void handleSettingCreated(id)}
+      />
+      <CreateCategoryDialog
+        open={createCategoryOpen}
+        onClose={() => setCreateCategoryOpen(false)}
+        onCreated={(id) => void handleCategoryCreated(id)}
+      />
+      <CreateCategoryDialog
+        open={renameCategoryOpen}
+        mode="rename"
+        categoryId={renameCategoryId}
+        onClose={() => {
+          setRenameCategoryOpen(false);
+          setRenameCategoryId("");
+        }}
+        onCreated={() => {}}
+        onRenamed={(id) => void handleCategoryRenamed(id)}
+      />
+      <ConfirmDialog
+        open={!!deleteCategoryTarget}
+        title="删除设定分类"
+        message={
+          deleteCategoryTarget
+            ? `确定删除「${deleteCategoryTarget.label}」？${
+                (wikiCounts[deleteCategoryTarget.id] ?? 0) > 0
+                  ? ` 该分类下 ${wikiCounts[deleteCategoryTarget.id]} 条设定将一并删除，且不可恢复。`
+                  : " 空分类将被移除。"
+              }`
+            : ""
+        }
+        confirmLabel="删除"
+        destructive
+        onConfirm={() => void confirmDeleteCategory()}
+        onCancel={() => setDeleteCategoryTarget(null)}
+      />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} status={status} />
 

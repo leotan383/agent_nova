@@ -604,6 +604,13 @@ export interface CreateWikiSettingInput {
   template_kind: string;
 }
 
+export interface SettingCategoryDTO {
+  id: string;
+  label: string;
+  subdir: string;
+  builtin: boolean;
+}
+
 export interface ChapterDocDTO {
   kind: string;
   chapter: number;
@@ -776,6 +783,10 @@ interface AppBindings {
   ListWikiEntries(): Promise<WikiEntryDTO[]>;
   GetWikiContent(id: string): Promise<WikiContentDTO>;
   SaveWikiContent(id: string, body: string): Promise<void>;
+  ListSettingCategories(): Promise<SettingCategoryDTO[]>;
+  CreateSettingCategory(name: string): Promise<SettingCategoryDTO>;
+  RenameSettingCategory(categoryId: string, newName: string): Promise<SettingCategoryDTO>;
+  DeleteSettingCategory(categoryId: string): Promise<void>;
   CreateWikiSetting(input: CreateWikiSettingInput): Promise<WikiContentDTO>;
 }
 

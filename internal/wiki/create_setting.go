@@ -20,14 +20,9 @@ func CreateSetting(p *project.Project, st *store.Store, subdir, title, templateK
 	if subdir == "" {
 		return Content{}, fmt.Errorf("无效分类目录")
 	}
-	for _, sub := range project.DefaultSettingSubdirs {
-		if sub == subdir {
-			goto validSubdir
-		}
+	if !p.IsKnownSettingSubdir(subdir) {
+		return Content{}, fmt.Errorf("无效分类: %s", subdir)
 	}
-	return Content{}, fmt.Errorf("无效分类: %s", subdir)
-
-validSubdir:
 	rel := filepath.ToSlash(filepath.Join(subdir, title+".md"))
 	if err := project.ValidateSettingRelPath(rel); err != nil {
 		return Content{}, err

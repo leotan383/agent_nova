@@ -1,34 +1,44 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
-import { SettingCategory } from "../lib/wikiCategories";
-import { app } from "../lib/wails";
+import {
+  SettingCategory,
+  categoryLabel,
+  categorySubdir,
+  isBuiltinCategory,
+} from "../lib/wikiCategories";
+import { SettingCategoryDTO, app } from "../lib/wails";
 
 type Props = {
   open: boolean;
   category: SettingCategory;
+  categories: SettingCategoryDTO[];
   onClose: () => void;
   onCreated: (id: string) => void;
 };
 
-const templateOptions: Record<
-  SettingCategory,
-  { id: string; label: string }[]
-> = {
+const builtinTemplates: Record<string, { id: string; label: string }[]> = {
   角色: [
     { id: "character", label: "角色卡" },
     { id: "villain", label: "反派" },
     { id: "blank", label: "空白" },
   ],
-  背景: [{ id: "default", label: "世界观条目" }],
+  世界观: [{ id: "default", label: "世界观条目" }],
   势力: [{ id: "default", label: "势力条目" }],
   地点: [{ id: "default", label: "地点条目" }],
   物品: [{ id: "default", label: "物品条目" }],
-  其他: [{ id: "blank", label: "空白" }],
 };
+
+function templatesFor(category: string, categories: SettingCategoryDTO[]) {
+  if (isBuiltinCategory(category, categories)) {
+    return builtinTemplates[category] ?? [{ id: "blank", label: "空白" }];
+  }
+  return [{ id: "blank", label: "空白" }];
+}
 
 export default function CreateSettingDialog({
   open,
   category,
+  categories,
   onClose,
   onCreated,
 }: Props) {
@@ -37,14 +47,20 @@ export default function CreateSettingDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const templates = templateOptions[category];
+  const label = categoryLabel(category, categories);
+  const subdir = categorySubdir(category, categories);
+  const templates = useMemo(
+    () => templatesFor(category, categories),
+    [category, categories],
+  );
+  const defaultTemplateKind = templates[0]?.id ?? "default";
 
   useEffect(() => {
     if (!open) return;
     setTitle("");
     setError("");
-    setTemplateKind(templates[0]?.id ?? "default");
-  }, [open, category, templates]);
+    setTemplateKind(defaultTemplateKind);
+  }, [open, category, defaultTemplateKind]);
 
   if (!open) return null;
 
@@ -83,10 +99,10 @@ export default function CreateSettingDialog({
         <div className="border-b border-studio-border px-5 py-4">
           <div className="flex items-center gap-2">
             <Plus className="h-4 w-4 text-studio-accent" />
-            <h2 className="text-base font-medium">新建{category}设定</h2>
+            <h2 className="text-base font-medium">新建{label}设定</h2>
           </div>
           <p className="mt-1 text-xs text-studio-muted">
-            保存至设定集/{category === "背景" ? "世界" : category}/，可在右侧直接编辑
+            保存至设定集/{subdir}/，可在右侧直接编辑
           </p>
         </div>
 

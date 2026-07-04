@@ -100,16 +100,102 @@ func (a *App) SaveWikiContent(id, body string) error {
 	})
 }
 
+// SettingCategoryDTO 设定集分类。
+type SettingCategoryDTO struct {
+	ID      string `json:"id"`
+	Label   string `json:"label"`
+	Subdir  string `json:"subdir"`
+	Builtin bool   `json:"builtin"`
+}
+
+func toSettingCategoryDTOs(cats []project.SettingCategoryInfo) []SettingCategoryDTO {
+	out := make([]SettingCategoryDTO, len(cats))
+	for i, c := range cats {
+		out[i] = SettingCategoryDTO{
+			ID: c.ID, Label: c.Label, Subdir: c.Subdir, Builtin: c.Builtin,
+		}
+	}
+	return out
+}
+
+// ListSettingCategories 返回当前项目的设定分类（内置 + 用户自定义，不含「其他」）。
+func (a *App) ListSettingCategories() (out []SettingCategoryDTO, err error) {
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return nil, err
+	}
+	err = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		cats, listErr := actx.Project.ListSettingCategories()
+		if listErr != nil {
+			return listErr
+		}
+		out = toSettingCategoryDTOs(cats)
+		return nil
+	})
+	return out, err
+}
+
+// CreateSettingCategory 新建用户自定义设定分类。
+func (a *App) CreateSettingCategory(name string) (SettingCategoryDTO, error) {
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return SettingCategoryDTO{}, err
+	}
+	var result SettingCategoryDTO
+	err = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		cat, createErr := actx.Project.CreateSettingCategory(name)
+		if createErr != nil {
+			return createErr
+		}
+		result = SettingCategoryDTO{
+			ID: cat.ID, Label: cat.Label, Subdir: cat.Subdir, Builtin: cat.Builtin,
+		}
+		return nil
+	})
+	return result, err
+}
+
+// RenameSettingCategory 重命名用户自定义设定分类。
+func (a *App) RenameSettingCategory(categoryID, newName string) (SettingCategoryDTO, error) {
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return SettingCategoryDTO{}, err
+	}
+	var result SettingCategoryDTO
+	err = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		cat, renameErr := wiki.RenameSettingCategory(actx.Project, actx.Store, categoryID, newName)
+		if renameErr != nil {
+			return renameErr
+		}
+		result = SettingCategoryDTO{
+			ID: cat.ID, Label: cat.Label, Subdir: cat.Subdir, Builtin: cat.Builtin,
+		}
+		return nil
+	})
+	return result, err
+}
+
+// DeleteSettingCategory 删除用户自定义设定分类及其下全部设定。
+func (a *App) DeleteSettingCategory(categoryID string) error {
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return err
+	}
+	return a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		return wiki.DeleteSettingCategory(actx.Project, actx.Store, categoryID)
+	})
+}
+
 // CreateWikiSettingInput 新建设定文档。
 type CreateWikiSettingInput struct {
-	Category     string `json:"category"`      // 角色|背景|势力|地点|物品|其他
+	Category     string `json:"category"`      // 分类 id（内置或自定义）
 	Title        string `json:"title"`         // 文件名（不含 .md）
 	TemplateKind string `json:"template_kind"` // character|villain|blank
 }
 
 // CreateWikiSetting 在设定集对应子目录创建 Markdown 并返回新条目。
 func (a *App) CreateWikiSetting(in CreateWikiSettingInput) (WikiContentDTO, error) {
-	subdir, ok := categoryToSubdir[in.Category]
+	subdir, ok := resolveCategorySubdir(in.Category)
 	if !ok || in.Category == "" {
 		return WikiContentDTO{}, fmt.Errorf("无效设定分类")
 	}
@@ -129,11 +215,12 @@ func (a *App) CreateWikiSetting(in CreateWikiSettingInput) (WikiContentDTO, erro
 	return result, err
 }
 
-var categoryToSubdir = map[string]string{
-	"角色": project.SettingsSubCharacter,
-	"背景": project.SettingsSubWorld,
-	"势力": project.SettingsSubFaction,
-	"地点": project.SettingsSubLocation,
-	"物品": project.SettingsSubItem,
-	"其他": project.SettingsSubOther,
+func resolveCategorySubdir(categoryID string) (string, bool) {
+	if subdir, ok := project.ResolveCategorySubdir(categoryID); ok {
+		return subdir, true
+	}
+	if categoryID == project.SettingsSubOther {
+		return project.SettingsSubOther, true
+	}
+	return "", false
 }

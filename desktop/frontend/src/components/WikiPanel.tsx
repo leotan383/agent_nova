@@ -4,35 +4,24 @@ import {
   CircleHelp,
   ExternalLink,
   Loader2,
-  MapPin,
-  Package,
   Plus,
   RefreshCw,
-  ScrollText,
   Search,
-  Swords,
-  Users,
 } from "lucide-react";
-import { EntityDTO, StatusReport, WikiContentDTO, WikiEntryDTO, app } from "../lib/wails";
+import { EntityDTO, SettingCategoryDTO, StatusReport, WikiContentDTO, WikiEntryDTO, app } from "../lib/wails";
 import {
   META_SYNOPSIS_ID,
   SettingCategory,
+  buildSubdirToCategory,
+  categoryLabel,
   filterByCategory,
   splitCategoryEntries,
 } from "../lib/wikiCategories";
+import { settingCategoryIcon } from "../lib/settingCategoryIcons";
 import { confirmUnsavedLeave } from "../lib/unsavedGuard";
 import EntityDetailView from "./EntityDetailView";
 import CreateSettingDialog from "./CreateSettingDialog";
 import MarkdownEditor from "./MarkdownEditor";
-
-const categoryIcon: Record<SettingCategory, typeof Users> = {
-  角色: Users,
-  背景: BookOpen,
-  势力: Swords,
-  地点: MapPin,
-  物品: Package,
-  其他: ScrollText,
-};
 
 const kindLabel: Record<string, string> = {
   setting: "设定集",
@@ -45,6 +34,7 @@ const kindLabel: Record<string, string> = {
 type Props = {
   status?: StatusReport | null;
   initialSelectedID?: string;
+  settingCategories: SettingCategoryDTO[];
   /** 从主导航进入某一设定分类时，只展示该分类下的条目 */
   categoryFilter?: SettingCategory | null;
   /** 从主导航进入简介/大纲时，只展示主题区 */
@@ -66,6 +56,7 @@ const CATEGORY_SUBVIEW_HINTS: Partial<Record<CategorySubview, string>> = {
 export default function WikiPanel({
   status,
   initialSelectedID = "",
+  settingCategories,
   categoryFilter = null,
   themeOnly = false,
 }: Props) {
@@ -105,11 +96,16 @@ export default function WikiPanel({
     }
   }, [initialSelectedID]);
 
+  const subdirToCategory = useMemo(
+    () => buildSubdirToCategory(settingCategories),
+    [settingCategories],
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let list = entries;
     if (categoryFilter) {
-      list = filterByCategory(list, categoryFilter);
+      list = filterByCategory(list, categoryFilter, subdirToCategory);
     }
     if (!q) return list;
     return list.filter(
@@ -118,13 +114,13 @@ export default function WikiPanel({
         e.subtitle.toLowerCase().includes(q) ||
         (kindLabel[e.kind] ?? e.kind).toLowerCase().includes(q),
     );
-  }, [entries, query, categoryFilter]);
+  }, [entries, query, categoryFilter, subdirToCategory]);
 
   const { settingEntries, entityEntries } = useMemo(() => {
     if (!categoryFilter) {
       return { settingEntries: [] as WikiEntryDTO[], entityEntries: [] as WikiEntryDTO[] };
     }
-    const { archives, states } = splitCategoryEntries(filtered, categoryFilter);
+    const { archives, states } = splitCategoryEntries(filtered, categoryFilter, subdirToCategory);
     const byTitle = (a: WikiEntryDTO, b: WikiEntryDTO) =>
       a.title.localeCompare(b.title, "zh-CN");
     return {
@@ -271,9 +267,9 @@ export default function WikiPanel({
   };
 
   const showEntityView = content?.kind === "entity" && entityData;
-  const panelTitle = categoryFilter ?? "设定";
+  const panelTitle = categoryFilter ? categoryLabel(categoryFilter, settingCategories) : "设定";
 
-  const CategoryIcon = categoryFilter ? categoryIcon[categoryFilter] : BookOpen;
+  const CategoryIcon = categoryFilter ? settingCategoryIcon(categoryFilter) : BookOpen;
 
   const renderEntryRow = (e: WikiEntryDTO) => (
     <li key={e.id}>
@@ -463,6 +459,7 @@ export default function WikiPanel({
         <CreateSettingDialog
           open={createOpen}
           category={categoryFilter}
+          categories={settingCategories}
           onClose={() => setCreateOpen(false)}
           onCreated={(id) => void handleSettingCreated(id)}
         />
