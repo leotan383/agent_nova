@@ -90,6 +90,24 @@ func SubdirToCategoryID(subdir string) string {
 
 // ListSettingCategories 返回侧边栏可见的设定分类（不含「其他」）。
 func (p *Project) ListSettingCategories() ([]SettingCategoryInfo, error) {
+	all, err := p.collectSettingCategories()
+	if err != nil {
+		return nil, err
+	}
+	order, legacyCustomOnly, err := p.LoadCategoryOrder()
+	if err != nil {
+		return nil, err
+	}
+	if legacyCustomOnly {
+		return applyLegacyCustomCategoryOrder(all, order), nil
+	}
+	if len(order) > 0 {
+		return applyCategoryOrder(all, order), nil
+	}
+	return all, nil
+}
+
+func (p *Project) collectSettingCategories() ([]SettingCategoryInfo, error) {
 	if err := p.EnsureSettingsSubdirs(); err != nil {
 		return nil, err
 	}
@@ -139,6 +157,45 @@ func (p *Project) ListSettingCategories() ([]SettingCategoryInfo, error) {
 	return out, nil
 }
 
+// SaveSettingCategoryOrderValidated 校验并保存设定分类排序（内置 + 自定义）。
+func (p *Project) SaveSettingCategoryOrderValidated(order []string) error {
+	all, err := p.collectSettingCategories()
+	if err != nil {
+		return err
+	}
+	validIDs := map[string]struct{}{}
+	for _, c := range all {
+		validIDs[c.ID] = struct{}{}
+	}
+	clean := make([]string, 0, len(order))
+	used := map[string]struct{}{}
+	for _, id := range order {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := validIDs[id]; !ok {
+			return fmt.Errorf("无效分类: %s", id)
+		}
+		if _, dup := used[id]; dup {
+			continue
+		}
+		used[id] = struct{}{}
+		clean = append(clean, id)
+	}
+	for _, c := range all {
+		if _, ok := used[c.ID]; !ok {
+			clean = append(clean, c.ID)
+		}
+	}
+	return p.SaveCategoryOrder(clean)
+}
+
+// SaveCustomCategoryOrderValidated 兼容旧调用名。
+func (p *Project) SaveCustomCategoryOrderValidated(order []string) error {
+	return p.SaveSettingCategoryOrderValidated(order)
+}
+
 // CreateSettingCategory 新建用户自定义设定分类（创建子目录）。
 func (p *Project) CreateSettingCategory(name string) (SettingCategoryInfo, error) {
 	name = SanitizeCategoryName(name)
@@ -160,6 +217,7 @@ func (p *Project) CreateSettingCategory(name string) (SettingCategoryInfo, error
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return SettingCategoryInfo{}, err
 	}
+	_ = p.appendCategoryOrder(name)
 	return SettingCategoryInfo{ID: name, Label: name, Subdir: name, Builtin: false}, nil
 }
 
@@ -253,6 +311,7 @@ func (p *Project) RenameSettingCategory(oldID, newName string) (SettingCategoryI
 	if err := os.Rename(oldDir, newDir); err != nil {
 		return SettingCategoryInfo{}, err
 	}
+	_ = p.renameCategoryOrder(oldID, newName)
 	return SettingCategoryInfo{ID: newName, Label: newName, Subdir: newName, Builtin: false}, nil
 }
 
@@ -276,6 +335,7 @@ func (p *Project) DeleteSettingCategory(categoryID string) ([]string, error) {
 	if err := os.Remove(dir); err != nil && !os.IsNotExist(err) {
 		return deleted, err
 	}
+	_ = p.removeCategoryOrder(categoryID)
 	return deleted, nil
 }
 

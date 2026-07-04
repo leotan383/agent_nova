@@ -10,12 +10,10 @@ import {
   GitBranch,
   LayoutDashboard,
   Map,
-  Pencil,
   Plus,
   ScrollText,
   Search,
   Settings,
-  Trash2,
 } from "lucide-react";
 import { ChapterDTO, NovelCard, SearchHitDTO, SettingCategoryDTO, StatusReport, WikiEntryDTO, app, phaseLabel } from "../lib/wails";
 import {
@@ -26,10 +24,11 @@ import {
   countByCategory,
   listSidebarOutlineEntries,
 } from "../lib/wikiCategories";
-import { settingCategoryIcon } from "../lib/settingCategoryIcons";
 import CreateCategoryDialog from "../components/CreateCategoryDialog";
 import CreateSettingDialog from "../components/CreateSettingDialog";
 import ConfirmDialog from "../components/ConfirmDialog";
+import SettingCategoryNav from "../components/SettingCategoryNav";
+import SettingTemplateChecklist from "../components/SettingTemplateChecklist";
 import ChaptersPanel, { ChapterDocTab, ChaptersView } from "../components/ChaptersPanel";
 import ForeshadowPanel, { ForeshadowFocus } from "../components/ForeshadowPanel";
 import MemoryPanel, { MemoryFocus } from "../components/MemoryPanel";
@@ -100,6 +99,8 @@ export default function StudioPage() {
   const [autoReviewChapter, setAutoReviewChapter] = useState<number | null>(null);
   const [createSettingOpen, setCreateSettingOpen] = useState(false);
   const [createSettingCategory, setCreateSettingCategory] = useState<SettingCategory>("角色");
+  const [createSettingTitle, setCreateSettingTitle] = useState("");
+  const [createSettingTemplateKind, setCreateSettingTemplateKind] = useState<string | undefined>();
   const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
   const [renameCategoryId, setRenameCategoryId] = useState("");
   const [renameCategoryOpen, setRenameCategoryOpen] = useState(false);
@@ -417,14 +418,26 @@ export default function StudioPage() {
 
   type NavItem = { id: Tab; label: string; icon: typeof LayoutDashboard; hint?: string };
 
-  const openCreateSettingFor = (cat: SettingCategory) => {
+  const openCreateSettingFor = (
+    cat: SettingCategory,
+    opts?: { title?: string; templateKind?: string },
+  ) => {
     setCreateSettingCategory(cat);
+    setCreateSettingTitle(opts?.title ?? "");
+    setCreateSettingTemplateKind(opts?.templateKind);
     setCreateSettingOpen(true);
+  };
+
+  const openChecklistItem = (category: string, title: string, templateKind: string) => {
+    openCreateSettingFor(category, { title, templateKind });
   };
 
   const handleSettingCreated = async (id: string) => {
     setCreateSettingOpen(false);
+    setCreateSettingTitle("");
+    setCreateSettingTemplateKind(undefined);
     await loadWikiMeta();
+    setHealthRefreshKey((k) => k + 1);
     await goToWikiEntry(id);
   };
 
@@ -717,63 +730,27 @@ export default function StudioPage() {
                 </button>
               </div>
 
-              <nav className="space-y-0.5">
-                {settingCategories.map((cat) => {
-                  const Icon = settingCategoryIcon(cat.id);
-                  const count = wikiCounts[cat.id] ?? 0;
-                  const active = tab === "wiki" && wikiCategory === cat.id && !wikiThemeOnly;
-                  return (
-                    <div key={cat.id} className="group flex items-center gap-0.5">
-                      <button
-                        type="button"
-                        onClick={() => void goToWikiCategory(cat.id)}
-                        className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
-                          active
-                            ? "bg-studio-accent/15 text-studio-accent"
-                            : "text-studio-muted hover:bg-studio-panel hover:text-studio-text"
-                        }`}
-                      >
-                        <Icon className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate text-left">{cat.label}</span>
-                        {count > 0 && (
-                          <span className="text-xs tabular-nums text-studio-muted/70">({count})</span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openCreateSettingFor(cat.id)}
-                        className="shrink-0 rounded-md p-1 text-studio-muted opacity-0 transition hover:bg-studio-panel hover:text-studio-accent group-hover:opacity-100"
-                        title={`新建${cat.label}设定`}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                      {!cat.builtin && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRenameCategoryId(cat.id);
-                              setRenameCategoryOpen(true);
-                            }}
-                            className="shrink-0 rounded-md p-1 text-studio-muted opacity-0 transition hover:bg-studio-panel hover:text-studio-text group-hover:opacity-100"
-                            title={`重命名「${cat.label}」`}
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteCategoryTarget(cat)}
-                            className="shrink-0 rounded-md p-1 text-studio-muted opacity-0 transition hover:bg-[rgb(var(--studio-danger-bg))] hover:text-[rgb(var(--studio-danger-fg))] group-hover:opacity-100"
-                            title={`删除「${cat.label}」`}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </nav>
+              <SettingTemplateChecklist
+                refreshKey={healthRefreshKey}
+                onCreateItem={openChecklistItem}
+                onOpenSetting={(id) => void goToWikiEntry(id)}
+              />
+
+              <SettingCategoryNav
+                categories={settingCategories}
+                wikiCounts={wikiCounts}
+                activeCategory={wikiCategory}
+                wikiTabActive={tab === "wiki"}
+                wikiThemeOnly={wikiThemeOnly}
+                onSelectCategory={(id) => void goToWikiCategory(id)}
+                onCreateSetting={(id) => openCreateSettingFor(id)}
+                onRenameCategory={(id) => {
+                  setRenameCategoryId(id);
+                  setRenameCategoryOpen(true);
+                }}
+                onDeleteCategory={setDeleteCategoryTarget}
+                onOrderChange={setSettingCategories}
+              />
             </div>
             {renderStateSection()}
           </div>
@@ -899,6 +876,9 @@ export default function StudioPage() {
                 settingCategories={settingCategories}
                 categoryFilter={wikiThemeOnly ? null : wikiCategory}
                 themeOnly={wikiThemeOnly}
+                checklistRefreshKey={healthRefreshKey}
+                onCreateChecklistItem={openChecklistItem}
+                onOpenChecklistSetting={(id) => void goToWikiEntry(id)}
               />
             </div>
           )}
@@ -909,7 +889,13 @@ export default function StudioPage() {
         open={createSettingOpen}
         category={createSettingCategory}
         categories={settingCategories}
-        onClose={() => setCreateSettingOpen(false)}
+        initialTitle={createSettingTitle}
+        initialTemplateKind={createSettingTemplateKind}
+        onClose={() => {
+          setCreateSettingOpen(false);
+          setCreateSettingTitle("");
+          setCreateSettingTemplateKind(undefined);
+        }}
         onCreated={(id) => void handleSettingCreated(id)}
       />
       <CreateCategoryDialog

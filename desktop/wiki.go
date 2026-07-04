@@ -186,6 +186,63 @@ func (a *App) DeleteSettingCategory(categoryID string) error {
 	})
 }
 
+// SettingChecklistItemDTO 题材模板 checklist 条目。
+type SettingChecklistItemDTO struct {
+	ID           string `json:"id"`
+	Title        string `json:"title"`
+	CategoryID   string `json:"category_id"`
+	TemplateKind string `json:"template_kind"`
+	Done         bool   `json:"done"`
+	SettingRel   string `json:"setting_rel,omitempty"`
+}
+
+// SettingChecklistDTO 题材设定模板完成度。
+type SettingChecklistDTO struct {
+	Genre     string                    `json:"genre"`
+	Items     []SettingChecklistItemDTO `json:"items"`
+	DoneCount int                       `json:"done_count"`
+	Total     int                       `json:"total"`
+}
+
+// GetSettingChecklist 返回当前题材建议的设定模板 checklist。
+func (a *App) GetSettingChecklist() (SettingChecklistDTO, error) {
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return SettingChecklistDTO{}, err
+	}
+	var result SettingChecklistDTO
+	err = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		items, genre, listErr := actx.Project.SettingChecklist()
+		if listErr != nil {
+			return listErr
+		}
+		result.Genre = genre
+		result.Total = len(items)
+		for _, it := range items {
+			if it.Done {
+				result.DoneCount++
+			}
+			result.Items = append(result.Items, SettingChecklistItemDTO{
+				ID: it.ID, Title: it.Title, CategoryID: it.CategoryID,
+				TemplateKind: it.TemplateKind, Done: it.Done, SettingRel: it.SettingRel,
+			})
+		}
+		return nil
+	})
+	return result, err
+}
+
+// SaveSettingCategoryOrder 保存设定分类排序（内置 + 自定义）。
+func (a *App) SaveSettingCategoryOrder(order []string) error {
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return err
+	}
+	return a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		return actx.Project.SaveSettingCategoryOrderValidated(order)
+	})
+}
+
 // CreateWikiSettingInput 新建设定文档。
 type CreateWikiSettingInput struct {
 	Category     string `json:"category"`      // 分类 id（内置或自定义）

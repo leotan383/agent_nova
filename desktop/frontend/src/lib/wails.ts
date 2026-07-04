@@ -611,6 +611,22 @@ export interface SettingCategoryDTO {
   builtin: boolean;
 }
 
+export interface SettingChecklistItemDTO {
+  id: string;
+  title: string;
+  category_id: string;
+  template_kind: string;
+  done: boolean;
+  setting_rel?: string;
+}
+
+export interface SettingChecklistDTO {
+  genre: string;
+  items: SettingChecklistItemDTO[];
+  done_count: number;
+  total: number;
+}
+
 export interface ChapterDocDTO {
   kind: string;
   chapter: number;
@@ -787,6 +803,8 @@ interface AppBindings {
   CreateSettingCategory(name: string): Promise<SettingCategoryDTO>;
   RenameSettingCategory(categoryId: string, newName: string): Promise<SettingCategoryDTO>;
   DeleteSettingCategory(categoryId: string): Promise<void>;
+  SaveSettingCategoryOrder(order: string[]): Promise<void>;
+  GetSettingChecklist(): Promise<SettingChecklistDTO>;
   CreateWikiSetting(input: CreateWikiSettingInput): Promise<WikiContentDTO>;
 }
 

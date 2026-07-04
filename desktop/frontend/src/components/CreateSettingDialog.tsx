@@ -12,6 +12,8 @@ type Props = {
   open: boolean;
   category: SettingCategory;
   categories: SettingCategoryDTO[];
+  initialTitle?: string;
+  initialTemplateKind?: string;
   onClose: () => void;
   onCreated: (id: string) => void;
 };
@@ -39,6 +41,8 @@ export default function CreateSettingDialog({
   open,
   category,
   categories,
+  initialTitle = "",
+  initialTemplateKind,
   onClose,
   onCreated,
 }: Props) {
@@ -57,10 +61,10 @@ export default function CreateSettingDialog({
 
   useEffect(() => {
     if (!open) return;
-    setTitle("");
+    setTitle(initialTitle);
     setError("");
-    setTemplateKind(defaultTemplateKind);
-  }, [open, category, defaultTemplateKind]);
+    setTemplateKind(initialTemplateKind ?? defaultTemplateKind);
+  }, [open, category, defaultTemplateKind, initialTitle, initialTemplateKind]);
 
   if (!open) return null;
 

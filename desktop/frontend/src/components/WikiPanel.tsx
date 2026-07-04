@@ -22,6 +22,7 @@ import { confirmUnsavedLeave } from "../lib/unsavedGuard";
 import EntityDetailView from "./EntityDetailView";
 import CreateSettingDialog from "./CreateSettingDialog";
 import MarkdownEditor from "./MarkdownEditor";
+import SettingTemplateChecklist from "./SettingTemplateChecklist";
 
 const kindLabel: Record<string, string> = {
   setting: "设定集",
@@ -39,6 +40,9 @@ type Props = {
   categoryFilter?: SettingCategory | null;
   /** 从主导航进入简介/大纲时，只展示主题区 */
   themeOnly?: boolean;
+  checklistRefreshKey?: number;
+  onCreateChecklistItem?: (category: string, title: string, templateKind: string) => void;
+  onOpenChecklistSetting?: (wikiID: string) => void;
 };
 
 function parseEntityID(wikiID: string): string {
@@ -59,6 +63,9 @@ export default function WikiPanel({
   settingCategories,
   categoryFilter = null,
   themeOnly = false,
+  checklistRefreshKey = 0,
+  onCreateChecklistItem,
+  onOpenChecklistSetting,
 }: Props) {
   const [entries, setEntries] = useState<WikiEntryDTO[]>([]);
   const [loading, setLoading] = useState(true);
@@ -381,15 +388,26 @@ export default function WikiPanel({
                 <Loader2 className="h-5 w-5 animate-spin" />
               </div>
             ) : categoryFilter ? (
-              activeCategoryEntries.length === 0 ? (
-                <p className="px-4 py-6 text-center text-xs leading-relaxed text-studio-muted">
-                  {categorySubview === "settings"
-                    ? "暂无设定文档，点击右上角 + 在文件夹中新建 Markdown"
-                    : "暂无 AI 提取记录，写章审查后会自动更新"}
-                </p>
-              ) : (
-                <ul>{activeCategoryEntries.map(renderEntryRow)}</ul>
-              )
+              <>
+                {onCreateChecklistItem && (
+                  <SettingTemplateChecklist
+                    refreshKey={checklistRefreshKey}
+                    categoryFilter={categoryFilter}
+                    onCreateItem={onCreateChecklistItem}
+                    onOpenSetting={onOpenChecklistSetting}
+                    className="mx-3 mt-3 shrink-0"
+                  />
+                )}
+                {activeCategoryEntries.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-xs leading-relaxed text-studio-muted">
+                    {categorySubview === "settings"
+                      ? "暂无设定文档，点击右上角 + 在文件夹中新建 Markdown"
+                      : "暂无 AI 提取记录，写章审查后会自动更新"}
+                  </p>
+                ) : (
+                  <ul>{activeCategoryEntries.map(renderEntryRow)}</ul>
+                )}
+              </>
             ) : (
               <p className="px-4 py-6 text-center text-xs text-studio-muted">
                 请从左侧选择设定分类
