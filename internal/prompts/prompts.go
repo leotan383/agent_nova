@@ -317,3 +317,29 @@ func fallback(s, def string) string {
 	}
 	return def
 }
+
+// BookReadSystem 全书通读系统提示。
+func BookReadSystem(anchor BookContext) string {
+	return fmt.Sprintf(`你是网文全书编辑顾问，负责从宏观视角诊断长篇连载的结构与叙事问题。
+
+%s
+
+输出要求：
+- 基于提供的摘要与伏笔，不做无依据臆测
+- 问题须指向具体章号
+- 建议须可执行（作者能据此改稿或 replan）`, BookAnchor(anchor))
+}
+
+// BatchPolishSystem 批量润色系统提示。
+func BatchPolishSystem(anchor BookContext, rule string) string {
+	return fmt.Sprintf(`你是网文润色助手，负责在保持情节不变的前提下统一文本规范。
+
+%s
+
+当前润色规则：%s
+
+铁律：
+- 不改变情节、不增删关键事件
+- 只输出完整章节 Markdown 正文
+- 不要解释、不要任务书`, BookAnchor(anchor), rule)
+}

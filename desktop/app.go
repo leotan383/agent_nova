@@ -35,6 +35,7 @@ type App struct {
 	revise    reviseManager
 	selection selectionManager
 	discover  discoverManager
+	bookEdit  bookEditManager
 	session   projectSession
 }
 
@@ -49,6 +50,7 @@ func NewApp() *App {
 	a.revise = *newReviseManager(a)
 	a.selection = *newSelectionManager(a)
 	a.discover = *newDiscoverManager(a)
+	a.bookEdit = *newBookEditManager(a)
 	return a
 }
 

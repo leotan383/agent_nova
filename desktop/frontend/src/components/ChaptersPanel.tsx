@@ -1,8 +1,10 @@
-import { FileText, History, PenLine, Wand2 } from "lucide-react";
+import { FileText, History, MoreHorizontal, PenLine, Wand2 } from "lucide-react";
+import { useState } from "react";
 import { ChapterDTO, StatusReport, app } from "../lib/wails";
 import ChapterCoachPanel from "./ChapterCoachPanel";
 import ChapterDocumentPanel from "./ChapterDocumentPanel";
 import ChapterStatusBadge from "./ChapterStatusBadge";
+import ChapterStructureDialog from "./ChapterStructureDialog";
 import ChapterVersionPanel from "./ChapterVersionPanel";
 import WritePanel from "./WritePanel";
 
@@ -28,6 +30,7 @@ type Props = {
   onChapterSaved: () => void;
   onReviewComplete: () => void;
   onRebuildIndex: () => Promise<void>;
+  onStructureChange?: () => void;
 };
 
 export default function ChaptersPanel({
@@ -49,7 +52,19 @@ export default function ChaptersPanel({
   onChapterSaved,
   onReviewComplete,
   onRebuildIndex,
+  onStructureChange,
 }: Props) {
+  const [structureOpen, setStructureOpen] = useState(false);
+  const [structureMode, setStructureMode] = useState<"insert" | "delete">("insert");
+  const [structureChapter, setStructureChapter] = useState(0);
+  const [menuChapter, setMenuChapter] = useState<number | null>(null);
+
+  const openStructure = (mode: "insert" | "delete", chapter: number) => {
+    setStructureMode(mode);
+    setStructureChapter(chapter);
+    setStructureOpen(true);
+    setMenuChapter(null);
+  };
   const nextWriteChapter = Math.max(1, (status?.current_chapter ?? 0) + 1);
 
   return (
@@ -92,7 +107,7 @@ export default function ChaptersPanel({
             chapters.map((c) => {
               const active = view === "read" && selectedChapter === c.number;
               return (
-                <li key={c.number}>
+                <li key={c.number} className="relative">
                   <button
                     type="button"
                     onClick={() => onSelectChapter(c.number)}
@@ -103,6 +118,17 @@ export default function ChaptersPanel({
                     <div className="flex items-center gap-2">
                       <span className="font-medium">第{c.number}章</span>
                       <ChapterStatusBadge status={c.status} compact />
+                      <button
+                        type="button"
+                        title="章节结构"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuChapter(menuChapter === c.number ? null : c.number);
+                        }}
+                        className="ml-auto rounded p-1 text-studio-muted hover:bg-studio-panel hover:text-studio-text"
+                      >
+                        <MoreHorizontal className="h-3.5 w-3.5" />
+                      </button>
                       <select
                         value={(() => {
                           const s = (c.status || "reviewed").toLowerCase();
@@ -128,6 +154,24 @@ export default function ChaptersPanel({
                       {c.title || "无标题"} · {c.word_count}字
                     </div>
                   </button>
+                  {menuChapter === c.number && (
+                    <div className="absolute right-2 top-12 z-20 min-w-[140px] rounded-lg border border-studio-border bg-studio-panel py-1 shadow-card">
+                      <button
+                        type="button"
+                        className="block w-full px-3 py-1.5 text-left text-xs hover:bg-studio-bg"
+                        onClick={() => openStructure("insert", c.number)}
+                      >
+                        此后插入一章
+                      </button>
+                      <button
+                        type="button"
+                        className="block w-full px-3 py-1.5 text-left text-xs text-[rgb(var(--studio-danger-fg))] hover:bg-[rgb(var(--studio-danger-bg))]"
+                        onClick={() => openStructure("delete", c.number)}
+                      >
+                        删除本章
+                      </button>
+                    </div>
+                  )}
                 </li>
               );
             })
@@ -197,6 +241,17 @@ export default function ChaptersPanel({
           )}
         </>
       )}
+
+      <ChapterStructureDialog
+        open={structureOpen}
+        mode={structureMode}
+        chapter={structureChapter}
+        onClose={() => setStructureOpen(false)}
+        onDone={() => {
+          onStructureChange?.();
+          onChapterSaved();
+        }}
+      />
     </div>
   );
 }

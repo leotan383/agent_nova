@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/tanlian/agent_nova/internal/config"
+	"github.com/tanlian/agent_nova/internal/outline"
 	"github.com/tanlian/agent_nova/internal/project"
 	"github.com/tanlian/agent_nova/internal/prompts"
 	"github.com/tanlian/agent_nova/internal/store"
@@ -65,7 +65,7 @@ func (b *Builder) Build(chapter, volume int) (*Snapshot, error) {
 	volPath := b.Proj.VolumeOutlinePath(volume)
 	if data, err := os.ReadFile(volPath); err == nil {
 		full := string(data)
-		snap.ChapterOutline = extractChapterOutline(full, chapter)
+		snap.ChapterOutline = outline.ExtractChapterSection(full, chapter)
 		snap.VolumeOutline = truncateRunes(full, 4000)
 	}
 
@@ -248,37 +248,6 @@ func (b *Builder) settingsDigest() string {
 		total += blockLen
 	}
 	return strings.Join(parts, "\n\n")
-}
-
-var chapterHeaderRe = regexp.MustCompile(`(?m)^#{1,4}\s*第\s*0*(\d+)\s*章`)
-
-func extractChapterOutline(full string, chapter int) string {
-	if full == "" {
-		return ""
-	}
-	matches := chapterHeaderRe.FindAllStringSubmatchIndex(full, -1)
-	if len(matches) == 0 {
-		return truncateRunes(full, 1500)
-	}
-	target := -1
-	for i, loc := range matches {
-		num := full[loc[2]:loc[3]]
-		var n int
-		fmt.Sscanf(num, "%d", &n)
-		if n == chapter {
-			target = i
-			break
-		}
-	}
-	if target < 0 {
-		return truncateRunes(full, 1500)
-	}
-	start := matches[target][0]
-	end := len(full)
-	if target+1 < len(matches) {
-		end = matches[target+1][0]
-	}
-	return strings.TrimSpace(full[start:end])
 }
 
 func truncateRunes(s string, max int) string {

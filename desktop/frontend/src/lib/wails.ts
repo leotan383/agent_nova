@@ -239,6 +239,112 @@ export interface VolumeOutlineDTO {
   exists: boolean;
 }
 
+export interface OutlineChapterRowDTO {
+  volume: number;
+  chapter: number;
+  title: string;
+  outline_preview: string;
+  plan_status: string;
+  plan_status_note?: string;
+  match_status: string;
+  has_body: boolean;
+  word_count: number;
+  body_status?: string;
+  in_outline: boolean;
+}
+
+export interface OutlineMatrixSummaryDTO {
+  total_in_outline: number;
+  written: number;
+  unwritten: number;
+  deviated: number;
+  abandoned: number;
+  orphan?: number;
+}
+
+export interface OutlineMatrixDTO {
+  volume: number;
+  rows: OutlineChapterRowDTO[];
+  summary: OutlineMatrixSummaryDTO;
+}
+
+export interface CascadeImpactDTO {
+  chapters_shifted: number;
+  memories_affected: number;
+  foreshadows_affected: number;
+  entities_affected: number;
+  entity_history_affected: number;
+  reviews_affected: number;
+  cool_points_affected: number;
+}
+
+export interface ChapterStructurePreviewDTO {
+  operation: string;
+  target_chapter: number;
+  new_chapter?: number;
+  title?: string;
+  impact: CascadeImpactDTO;
+  dirs_to_rename: string[];
+  open_foreshadows_at_target: number;
+}
+
+export interface InsertChapterInput {
+  after_chapter: number;
+  title: string;
+}
+
+export interface DeleteChapterInput {
+  chapter: number;
+}
+
+export interface StartBookReadInput {
+  from_chapter?: number;
+  to_chapter?: number;
+  focus?: string;
+}
+
+export interface BookReadJobInfo {
+  id: string;
+  status: string;
+}
+
+export interface BookReadItemDTO {
+  category: string;
+  severity: string;
+  chapter: number;
+  title: string;
+  excerpt: string;
+  suggestion: string;
+}
+
+export interface BookReadReportDTO {
+  summary: string;
+  items: BookReadItemDTO[];
+}
+
+export interface StartBatchPolishInput {
+  chapters: number[];
+  rule: string;
+}
+
+export interface BatchPolishJobInfo {
+  id: string;
+  status: string;
+}
+
+export interface BatchPolishChapterResultDTO {
+  chapter: number;
+  title: string;
+  original: string;
+  polished: string;
+  error?: string;
+}
+
+export interface BatchPolishReportDTO {
+  rule: string;
+  results: BatchPolishChapterResultDTO[];
+}
+
 export interface StartReviewInput {
   chapter: number;
 }
@@ -806,6 +912,18 @@ interface AppBindings {
   SaveSettingCategoryOrder(order: string[]): Promise<void>;
   GetSettingChecklist(): Promise<SettingChecklistDTO>;
   CreateWikiSetting(input: CreateWikiSettingInput): Promise<WikiContentDTO>;
+  ListOutlineVolumes(): Promise<number[]>;
+  GetOutlineChapterMatrix(volume: number): Promise<OutlineMatrixDTO>;
+  PreviewInsertChapter(input: InsertChapterInput): Promise<ChapterStructurePreviewDTO>;
+  PreviewDeleteChapter(chapter: number): Promise<ChapterStructurePreviewDTO>;
+  InsertChapterAfter(input: InsertChapterInput): Promise<number>;
+  DeleteChapter(input: DeleteChapterInput): Promise<void>;
+  StartBookReadReport(input: StartBookReadInput): Promise<BookReadJobInfo>;
+  GetBookReadReport(jobID: string): Promise<BookReadReportDTO>;
+  StartBatchPolish(input: StartBatchPolishInput): Promise<BatchPolishJobInfo>;
+  GetBatchPolishReport(jobID: string): Promise<BatchPolishReportDTO>;
+  ApplyBatchPolishChapter(chapter: number, content: string): Promise<void>;
+  PreviewBatchPolishDiff(chapter: number, original: string, polished: string): Promise<DiffResultDTO>;
 }
 
 declare global {

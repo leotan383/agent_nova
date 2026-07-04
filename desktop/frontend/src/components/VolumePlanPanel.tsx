@@ -11,20 +11,34 @@ import {
 import { confirmUnsavedLeave } from "../lib/unsavedGuard";
 import ChapterDiffView from "./ChapterDiffView";
 import MarkdownEditor from "./MarkdownEditor";
+import OutlineChapterMatrix from "./OutlineChapterMatrix";
+import BookReadReportPanel from "./BookReadReportPanel";
+import BatchPolishDialog from "./BatchPolishDialog";
+import PolishChapterPicker from "./PolishChapterPicker";
 
 type Props = {
   suggestedVolume: number;
   currentChapter?: number;
   focusVolume?: number | null;
+  structureRefreshKey?: number;
   onComplete: () => void;
+  onOpenChapter?: (chapter: number) => void;
+  onStructureChange?: () => void;
 };
+
+type PlanView = "edit" | "matrix" | "tools";
 
 export default function VolumePlanPanel({
   suggestedVolume,
   currentChapter = 0,
   focusVolume,
+  structureRefreshKey = 0,
   onComplete,
+  onOpenChapter,
+  onStructureChange,
 }: Props) {
+  const [planView, setPlanView] = useState<PlanView>("edit");
+  const [polishChapters, setPolishChapters] = useState<number[]>([]);
   const [volume, setVolume] = useState(Math.max(1, suggestedVolume));
   const [volumeInput, setVolumeInput] = useState(String(Math.max(1, suggestedVolume)));
   const [outline, setOutline] = useState<VolumeOutlineDTO | null>(null);
@@ -271,15 +285,16 @@ export default function VolumePlanPanel({
       ref={panelRef}
       className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-studio-border bg-studio-panel p-5"
     >
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex shrink-0 flex-col gap-2">
         <div>
           <h3 className="text-sm font-medium">卷纲规划</h3>
           <p className="mt-1 text-xs text-studio-muted">
-            基于总纲与设定生成详细卷纲；已写 {currentChapter} 章后可 Replan 调整后续章纲。
+            基于总纲与设定生成详细卷纲
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-sm">
+
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-studio-border bg-studio-bg/40 px-3 py-2">
+          <label className="flex shrink-0 items-center gap-2 text-sm">
             <span className="text-studio-muted">卷号</span>
             <input
               type="number"
@@ -297,47 +312,118 @@ export default function VolumePlanPanel({
               className="w-16 rounded-lg border border-studio-border bg-studio-bg px-2 py-1 text-center"
             />
           </label>
-          {running ? (
-            <button
-              type="button"
-              onClick={cancelPlan}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-studio-border px-3 py-1.5 text-sm hover:bg-studio-bg"
-            >
-              <Square className="h-3.5 w-3.5" />
-              取消
-            </button>
-          ) : (
-            <>
-              {canReplan && (
-                <button
-                  type="button"
-                  onClick={() => void startReplan()}
-                  disabled={!hasKey || loading}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-studio-accent/40 px-3 py-1.5 text-sm text-studio-accent hover:bg-studio-accent/10 disabled:opacity-50"
-                  title={`从第 ${currentChapter + 1} 章起重新规划`}
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Replan
-                </button>
-              )}
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {running ? (
               <button
                 type="button"
-                onClick={() => void startPlan()}
-                disabled={!hasKey || loading}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-studio-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                onClick={cancelPlan}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-studio-border px-3 py-1.5 text-sm hover:bg-studio-bg"
               >
-                {loading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5" />
-                )}
-                {outline?.exists ? "重新生成" : "AI 生成卷纲"}
+                <Square className="h-3.5 w-3.5" />
+                取消
               </button>
-            </>
-          )}
+            ) : (
+              <>
+                {canReplan && (
+                  <button
+                    type="button"
+                    onClick={() => void startReplan()}
+                    disabled={!hasKey || loading}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-studio-accent/40 px-3 py-1.5 text-sm text-studio-accent hover:bg-studio-accent/10 disabled:opacity-50"
+                    title={`从第 ${currentChapter + 1} 章起重新规划`}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Replan
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void startPlan()}
+                  disabled={!hasKey || loading}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-studio-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                  title={outline?.exists ? "整卷重新生成卷纲（直接覆盖）" : "基于总纲与设定生成卷纲"}
+                >
+                  {loading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  {outline?.exists ? "重新生成" : "AI 生成卷纲"}
+                </button>
+              </>
+            )}
+          </div>
         </div>
+
+        {canReplan && !running && (
+          <p className="rounded-md bg-studio-accent/5 px-3 py-1.5 text-[11px] leading-relaxed text-studio-muted">
+            <span className="font-medium text-studio-text/80">Replan</span>
+            {" "}保留已写 {currentChapter} 章，从第 {currentChapter + 1} 章起调整后续章纲，预览 diff 后应用
+          </p>
+        )}
       </div>
 
+      <div className="mb-3 flex shrink-0 gap-1 rounded-lg border border-studio-border bg-studio-bg/50 p-1">
+        {(
+          [
+            ["edit", "卷纲编辑"],
+            ["matrix", "对照视图"],
+            ["tools", "全书工具"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setPlanView(id)}
+            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition ${
+              planView === id
+                ? "bg-studio-panel text-studio-accent shadow-sm"
+                : "text-studio-muted hover:text-studio-text"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {planView === "matrix" && (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <OutlineChapterMatrix
+            volume={volume}
+            refreshKey={structureRefreshKey}
+            onOpenChapter={onOpenChapter}
+            onStartReplan={() => void startReplan()}
+          />
+        </div>
+      )}
+
+      {planView === "tools" && (
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+          <div>
+            <h4 className="mb-2 text-xs font-medium text-studio-muted">全书通读报告</h4>
+            <BookReadReportPanel currentChapter={currentChapter} onOpenChapter={onOpenChapter} />
+          </div>
+          <div>
+            <h4 className="mb-2 text-xs font-medium text-studio-muted">批量润色</h4>
+            <p className="mb-2 text-[11px] leading-relaxed text-studio-muted">
+              统一人称、称谓或语气，不改变情节。先勾选章节，预览 diff 后再逐章应用。
+            </p>
+            <PolishChapterPicker
+              volume={volume}
+              refreshKey={structureRefreshKey}
+              selected={polishChapters}
+              onChange={setPolishChapters}
+            />
+            <div className="mt-3">
+              <BatchPolishDialog chapters={polishChapters} onApplied={onStructureChange} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {planView === "edit" && (
+        <>
       {canReplan && !running && (
         <div className="mb-3">
           <label className="block text-xs text-studio-muted">
@@ -417,6 +503,8 @@ export default function VolumePlanPanel({
             }
           />
         </div>
+      )}
+        </>
       )}
 
       {showDiffModal && previewDiff && (

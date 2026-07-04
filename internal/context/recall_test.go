@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/tanlian/agent_nova/internal/project"
@@ -95,7 +96,7 @@ func TestApplyMemoryBudget(t *testing.T) {
 func containsAny(slice []string, subs ...string) bool {
 	for _, s := range slice {
 		for _, sub := range subs {
-			if s == sub || contains(s, sub) {
+			if s == sub || strings.Contains(s, sub) {
 				return true
 			}
 		}
@@ -105,7 +106,7 @@ func containsAny(slice []string, subs ...string) bool {
 
 func TestBuildFTSQuery(t *testing.T) {
 	q := buildFTSQuery([]string{"萧炎", "家族"}, 5)
-	if !contains(q, "第5") || !contains(q, "萧炎") {
+	if !strings.Contains(q, "第5") || !strings.Contains(q, "萧炎") {
 		t.Fatalf("unexpected fts query: %q", q)
 	}
 }

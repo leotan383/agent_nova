@@ -79,6 +79,19 @@ export const PLAN_EVENTS = {
   error: "plan:error",
 } as const;
 
+export const BOOK_READ_EVENTS = {
+  status: "bookread:status",
+  done: "bookread:done",
+  error: "bookread:error",
+} as const;
+
+export const POLISH_EVENTS = {
+  status: "polish:status",
+  progress: "polish:progress",
+  done: "polish:done",
+  error: "polish:error",
+} as const;
+
 export const REVIEW_EVENTS = {
   status: "review:status",
   done: "review:done",

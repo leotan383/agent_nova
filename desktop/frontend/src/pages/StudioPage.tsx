@@ -815,7 +815,13 @@ export default function StudioPage() {
                 suggestedVolume={status.current_volume || 1}
                 currentChapter={status.current_chapter}
                 focusVolume={planFocusVolume}
+                structureRefreshKey={chapterRefreshKey}
                 onComplete={handlePlanComplete}
+                onOpenChapter={(num) => void guardedLoadChapter(num)}
+                onStructureChange={() => {
+                  setChapterRefreshKey((k) => k + 1);
+                  void loadStudio();
+                }}
               />
             </div>
           )}
@@ -842,6 +848,10 @@ export default function StudioPage() {
                 onReviewChapter={(num) => void requestReviewChapter(num)}
                 onReadChapter={(num) => void guardedLoadChapter(num)}
                 onChapterSaved={refreshChapterView}
+                onStructureChange={() => {
+                  setChapterRefreshKey((k) => k + 1);
+                  void loadStudio();
+                }}
                 onReviewComplete={handleReviewComplete}
                 onRebuildIndex={handleRebuildIndex}
               />
