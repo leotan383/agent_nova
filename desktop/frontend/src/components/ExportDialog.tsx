@@ -11,6 +11,7 @@ type Props = {
 const formats = [
   { id: "markdown", label: "Markdown 合集", hint: "适合备份与二次编辑" },
   { id: "epub", label: "EPUB 电子书", hint: "可在 Apple Books / Kindle 阅读" },
+  { id: "pdf", label: "PDF 文档", hint: "适合打印与分享，需系统有中文字体" },
   { id: "txt", label: "纯文本 TXT", hint: "干净正文，便于投稿平台" },
 ] as const;
 

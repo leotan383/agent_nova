@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/tanlian/agent_nova/internal/app"
+	memorypkg "github.com/tanlian/agent_nova/internal/memory"
 	"github.com/tanlian/agent_nova/internal/project"
 	"github.com/tanlian/agent_nova/internal/store"
 )
@@ -76,6 +77,36 @@ func (a *App) CreateMemory(in CreateMemoryInput) (MemoryDTO, error) {
 		out = MemoryDTO{
 			ID: m.ID, Category: m.Category, Subject: m.Subject, Content: m.Content,
 			SourceChapter: m.SourceChapter, Status: m.Status,
+		}
+		return nil
+	})
+	return out, err
+}
+
+// SettleMemoryResult 记忆沉淀到设定集的结果。
+type SettleMemoryResult struct {
+	RelPath string `json:"rel_path"`
+	Message string `json:"message"`
+}
+
+// SettleMemoryToSetting 将角色类记忆沉淀到 设定集/角色/{subject}.md，并归档该记忆。
+func (a *App) SettleMemoryToSetting(memoryID string) (SettleMemoryResult, error) {
+	if memoryID == "" {
+		return SettleMemoryResult{}, fmt.Errorf("记忆 ID 不能为空")
+	}
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return SettleMemoryResult{}, err
+	}
+	var out SettleMemoryResult
+	err = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		res, err := memorypkg.SettleCharacterMemoryToSetting(actx.Project, actx.Store, memoryID)
+		if err != nil {
+			return err
+		}
+		out = SettleMemoryResult{
+			RelPath: res.RelPath,
+			Message: fmt.Sprintf("已写入设定集/%s，记忆已归档", res.RelPath),
 		}
 		return nil
 	})

@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Download,
   FileText,
+  GitBranch,
   LayoutDashboard,
   Map,
   MapPin,
@@ -15,7 +16,6 @@ import {
   ScrollText,
   Search,
   Settings,
-  ShieldAlert,
   Swords,
   Users,
 } from "lucide-react";
@@ -29,7 +29,7 @@ import {
   listSidebarOutlineEntries,
 } from "../lib/wikiCategories";
 import ChaptersPanel, { ChapterDocTab, ChaptersView } from "../components/ChaptersPanel";
-import ConsistencyPanel from "../components/ConsistencyPanel";
+import ForeshadowPanel, { ForeshadowFocus } from "../components/ForeshadowPanel";
 import MemoryPanel, { MemoryFocus } from "../components/MemoryPanel";
 import OverviewPanel from "../components/OverviewPanel";
 import VolumePlanPanel from "../components/VolumePlanPanel";
@@ -41,7 +41,7 @@ import WikiPanel from "../components/WikiPanel";
 import UnsavedChangesDialog from "../components/UnsavedChangesDialog";
 import { confirmUnsavedLeave, hasUnsavedChanges } from "../lib/unsavedGuard";
 
-type Tab = "overview" | "planning" | "chapters" | "memory" | "consistency" | "wiki";
+type Tab = "overview" | "planning" | "chapters" | "memory" | "foreshadow" | "wiki";
 
 type NavSnapshot = {
   tab: Tab;
@@ -49,6 +49,7 @@ type NavSnapshot = {
   selectedChapter: number | null;
   chapterDocTab: ChapterDocTab;
   memoryFocus: MemoryFocus;
+  foreshadowFocus: ForeshadowFocus;
   wikiSelectedID: string;
   wikiCategory: SettingCategory | null;
   wikiThemeOnly: boolean;
@@ -76,6 +77,7 @@ export default function StudioPage() {
   const [chaptersView, setChaptersView] = useState<ChaptersView>("read");
   const [tab, setTab] = useState<Tab>("overview");
   const [memoryFocus, setMemoryFocus] = useState<MemoryFocus>("memories");
+  const [foreshadowFocus, setForeshadowFocus] = useState<ForeshadowFocus>("open");
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [error, setError] = useState("");
   const [versionPanelOpen, setVersionPanelOpen] = useState(false);
@@ -248,19 +250,19 @@ export default function StudioPage() {
   };
 
   const goToForeshadows = async () => {
-    if (tab === "memory" && memoryFocus === "foreshadows") return;
+    if (tab === "foreshadow" && foreshadowFocus === "open") return;
     const ok = await confirmUnsavedLeave();
     if (!ok) return;
-    setMemoryFocus("foreshadows");
-    setTab("memory");
+    setForeshadowFocus("open");
+    setTab("foreshadow");
   };
 
-  const goToConsistency = async () => {
-    if (tab === "consistency") return;
+  const goToMemoryConflicts = async () => {
+    if (tab === "memory" && memoryFocus === "conflicts") return;
     const ok = await confirmUnsavedLeave();
     if (!ok) return;
-    clearSearchReturn();
-    setTab("consistency");
+    setMemoryFocus("conflicts");
+    setTab("memory");
   };
 
   const goToPlanning = async (volume?: number) => {
@@ -324,6 +326,7 @@ export default function StudioPage() {
     setSelectedChapter(navBeforeSearch.selectedChapter);
     setChapterDocTab(navBeforeSearch.chapterDocTab);
     setMemoryFocus(navBeforeSearch.memoryFocus);
+    setForeshadowFocus(navBeforeSearch.foreshadowFocus);
     setWikiSelectedID(navBeforeSearch.wikiSelectedID);
     setWikiCategory(navBeforeSearch.wikiCategory);
     setWikiThemeOnly(navBeforeSearch.wikiThemeOnly);
@@ -340,6 +343,7 @@ export default function StudioPage() {
       selectedChapter,
       chapterDocTab,
       memoryFocus,
+      foreshadowFocus,
       wikiSelectedID,
       wikiCategory,
       wikiThemeOnly,
@@ -365,8 +369,8 @@ export default function StudioPage() {
         setTab("memory");
         break;
       case "foreshadow":
-        setMemoryFocus("foreshadows");
-        setTab("memory");
+        setForeshadowFocus("open");
+        setTab("foreshadow");
         break;
       default:
         if (hit.chapter > 0) loadChapter(hit.chapter, "body");
@@ -409,8 +413,18 @@ export default function StudioPage() {
 
   const outlineEntries = listSidebarOutlineEntries(wikiEntries);
   const metaNav: NavItem[] = [
-    { id: "memory", label: "记忆", icon: Brain },
-    { id: "consistency", label: "一致性", icon: ShieldAlert },
+    {
+      id: "memory",
+      label: "记忆",
+      icon: Brain,
+      hint: "写章时沉淀的可复用知识（角色、世界观、写法等），供后续章节注入上下文；可手动编辑或检测同主题冲突。",
+    },
+    {
+      id: "foreshadow",
+      label: "伏笔",
+      icon: GitBranch,
+      hint: "追踪连载悬念：Open 为尚未在正文兑现的线索，已回收为已完成收束的伏笔，避免长篇连载遗忘。",
+    },
   ];
 
   const renderNavButton = (item: NavItem, indent = false) => {
@@ -421,17 +435,24 @@ export default function StudioPage() {
         key={item.id}
         type="button"
         onClick={() => void switchTab(item.id)}
-        className={`flex w-full items-center gap-2 rounded-lg py-2 text-sm transition ${
+        className={`group relative flex w-full items-center gap-2 rounded-lg py-2 text-sm transition ${
           indent ? "px-3 pl-7" : "px-3"
         } ${
           active
             ? "bg-studio-accent/15 text-studio-accent"
             : "text-studio-muted hover:bg-studio-panel hover:text-studio-text"
         }`}
-        title={item.hint}
       >
         <Icon className="h-4 w-4 shrink-0" />
         <span className="min-w-0 flex-1 text-left">{item.label}</span>
+        {item.hint && (
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute inset-x-0 top-full z-50 mt-0.5 hidden rounded-md border border-studio-border bg-studio-panel px-2.5 py-2 text-left text-[11px] font-normal leading-snug text-studio-muted shadow-sm group-hover:block"
+          >
+            {item.hint}
+          </span>
+        )}
       </button>
     );
   };
@@ -663,7 +684,7 @@ export default function StudioPage() {
             {renderStateSection()}
           </div>
           <p className="mt-6 px-3 text-[11px] leading-relaxed text-studio-muted/80">
-            创作：概览、大纲与正文；设定：角色、背景等分类；状态：记忆与一致性。
+            创作：概览、大纲与正文；设定：角色、背景等分类；状态：记忆与伏笔。
           </p>
         </aside>
 
@@ -708,7 +729,7 @@ export default function StudioPage() {
                 onGoToCurrentChapter={() => void goToCurrentChapter()}
                 onGoToMemories={() => void goToMemories()}
                 onGoToForeshadows={() => void goToForeshadows()}
-                onGoToConsistency={() => void goToConsistency()}
+                onGoToMemoryConflicts={() => void goToMemoryConflicts()}
                 onProjectToolsRefresh={() => {
                   setHealthRefreshKey((k) => k + 1);
                   loadStudio();
@@ -766,16 +787,12 @@ export default function StudioPage() {
             </div>
           )}
 
-          {tab === "consistency" && (
+          {tab === "foreshadow" && (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <ConsistencyPanel
-                refreshKey={healthRefreshKey}
-                currentChapter={status?.current_chapter ?? 0}
-                onGoToWiki={(wikiID) => void goToWikiEntry(wikiID)}
-                onResolved={() => {
-                  setHealthRefreshKey((k) => k + 1);
-                  loadStudio();
-                }}
+              <ForeshadowPanel
+                focus={foreshadowFocus}
+                onFocusChange={setForeshadowFocus}
+                highlightId={searchHighlightId}
               />
             </div>
           )}

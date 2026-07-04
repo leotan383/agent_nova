@@ -32,7 +32,7 @@ type Props = {
   onGoToCurrentChapter: () => void;
   onGoToMemories: () => void;
   onGoToForeshadows: () => void;
-  onGoToConsistency: () => void;
+  onGoToMemoryConflicts: () => void;
   onProjectToolsRefresh?: () => void;
 };
 
@@ -50,7 +50,7 @@ export default function OverviewPanel({
   onGoToCurrentChapter,
   onGoToMemories,
   onGoToForeshadows,
-  onGoToConsistency,
+  onGoToMemoryConflicts,
   onProjectToolsRefresh,
 }: Props) {
   const nextChapter = Math.max(1, status.current_chapter + 1);
@@ -156,7 +156,12 @@ export default function OverviewPanel({
           />
         </div>
         <div className="space-y-4 lg:col-span-2">
-          <ConsistencySummaryCard refreshKey={healthRefreshKey} onGoToConsistency={onGoToConsistency} />
+          <ConsistencySummaryCard
+            refreshKey={healthRefreshKey}
+            onGoToMemoryConflicts={onGoToMemoryConflicts}
+            onGoToForeshadows={onGoToForeshadows}
+            onGoToMemories={onGoToMemories}
+          />
           <ProjectToolsCard refreshKey={healthRefreshKey} onRefresh={onProjectToolsRefresh} />
           <TokenUsageCard refreshKey={healthRefreshKey} />
           <OverviewMetrics
@@ -179,10 +184,14 @@ export default function OverviewPanel({
 
 function ConsistencySummaryCard({
   refreshKey,
-  onGoToConsistency,
+  onGoToMemoryConflicts,
+  onGoToForeshadows,
+  onGoToMemories,
 }: {
   refreshKey: number;
-  onGoToConsistency: () => void;
+  onGoToMemoryConflicts: () => void;
+  onGoToForeshadows: () => void;
+  onGoToMemories: () => void;
 }) {
   const [report, setReport] = useState<ConsistencyReportDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -205,6 +214,28 @@ function ConsistencySummaryCard({
 
   const s = report?.summary;
   const hasIssues = (s?.total_issues ?? 0) > 0;
+  const overdueForeshadows = (s?.overdue_foreshadows ?? 0) + (s?.critical_foreshadows ?? 0);
+
+  const handleAction = () => {
+    if (!s) return;
+    if (s.memory_conflicts > 0) {
+      onGoToMemoryConflicts();
+      return;
+    }
+    if (overdueForeshadows > 0 || s.open_foreshadows > 0) {
+      onGoToForeshadows();
+      return;
+    }
+    onGoToMemories();
+  };
+
+  const actionLabel = (() => {
+    if (!s || !hasIssues) return "";
+    if (s.memory_conflicts > 0) return "处理记忆冲突";
+    if (overdueForeshadows > 0) return "查看超期伏笔";
+    if (s.open_foreshadows > 0) return "查看 Open 伏笔";
+    return "查看记忆";
+  })();
 
   return (
     <div
@@ -216,7 +247,7 @@ function ConsistencySummaryCard({
     >
       <div className="mb-3 flex items-center gap-2">
         <ShieldAlert className={`h-3.5 w-3.5 ${hasIssues ? "text-[rgb(var(--studio-warning-fg))]" : "text-studio-muted"}`} />
-        <h3 className="text-xs font-medium uppercase tracking-wide text-studio-muted">一致性</h3>
+        <h3 className="text-xs font-medium uppercase tracking-wide text-studio-muted">连载检查</h3>
       </div>
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-studio-muted">
@@ -249,14 +280,18 @@ function ConsistencySummaryCard({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onGoToConsistency}
-            className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-studio-border px-3 py-2 text-sm text-studio-text transition hover:bg-studio-bg"
-          >
-            {hasIssues ? "查看并处理" : "打开一致性仪表盘"}
-            <ChevronRight className="h-4 w-4 text-studio-muted" />
-          </button>
+          {hasIssues ? (
+            <button
+              type="button"
+              onClick={handleAction}
+              className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-studio-border px-3 py-2 text-sm text-studio-text transition hover:bg-studio-bg"
+            >
+              {actionLabel}
+              <ChevronRight className="h-4 w-4 text-studio-muted" />
+            </button>
+          ) : (
+            <p className="mt-4 text-center text-xs text-[rgb(var(--studio-diff-add-stat))]">暂无待处理项</p>
+          )}
         </>
       ) : null}
     </div>

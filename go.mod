@@ -3,6 +3,7 @@ module github.com/tanlian/agent_nova
 go 1.20
 
 require (
+	github.com/go-pdf/fpdf v0.9.0
 	github.com/google/uuid v1.6.0
 	github.com/sashabaranov/go-openai v1.36.1
 	github.com/spf13/cobra v1.8.1

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Archive, Check, Lightbulb, Loader2, Pencil, Plus, X } from "lucide-react";
-import { CreateMemoryInput, ForeshadowDTO, MemoryConflictDTO, MemoryDTO, app } from "../lib/wails";
+import { CreateMemoryInput, MemoryConflictDTO, MemoryDTO, app } from "../lib/wails";
 
-export type MemoryFocus = "memories" | "foreshadows" | "resolved" | "conflicts";
+export type MemoryFocus = "memories" | "conflicts";
 
 const memoryCategories = [
   { value: "character", label: "角色" },
@@ -19,19 +19,15 @@ type Props = {
 
 const focusTabs: { id: MemoryFocus; label: string }[] = [
   { id: "memories", label: "长期记忆" },
-  { id: "foreshadows", label: "Open 伏笔" },
-  { id: "resolved", label: "已回收" },
   { id: "conflicts", label: "冲突检测" },
 ];
 
 export default function MemoryPanel({ focus, onFocusChange, highlightId = "" }: Props) {
   const [memories, setMemories] = useState<MemoryDTO[]>([]);
-  const [foreshadows, setForeshadows] = useState<ForeshadowDTO[]>([]);
   const [conflicts, setConflicts] = useState<MemoryConflictDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editingMemory, setEditingMemory] = useState<MemoryDTO | null>(null);
-  const [editingForeshadow, setEditingForeshadow] = useState<ForeshadowDTO | null>(null);
   const [creating, setCreating] = useState(false);
   const [newMemory, setNewMemory] = useState<CreateMemoryInput>({
     category: "plot",
@@ -40,8 +36,6 @@ export default function MemoryPanel({ focus, onFocusChange, highlightId = "" }: 
     source_chapter: 0,
   });
   const [saving, setSaving] = useState(false);
-  const [resolveID, setResolveID] = useState("");
-  const [resolveChapter, setResolveChapter] = useState(0);
   const [mergingSubject, setMergingSubject] = useState("");
   const [mergeKeepID, setMergeKeepID] = useState("");
   const [mergeContent, setMergeContent] = useState("");
@@ -58,17 +52,8 @@ export default function MemoryPanel({ focus, onFocusChange, highlightId = "" }: 
         setConflicts(list ?? []);
         return;
       }
-      const fsStatus = focus === "resolved" ? "resolved" : focus === "foreshadows" ? "open" : "";
-      const [mem, fs] = await Promise.all([
-        focus === "memories" ? app().ListMemories() : Promise.resolve([] as MemoryDTO[]),
-        focus === "foreshadows" || focus === "resolved"
-          ? app().ListForeshadows(fsStatus)
-          : Promise.resolve([] as ForeshadowDTO[]),
-      ]);
-      if (focus === "memories") {
-        setMemories(mem.filter((m) => m.status !== "archived"));
-      }
-      setForeshadows(fs);
+      const mem = await app().ListMemories();
+      setMemories(mem.filter((m) => m.status !== "archived"));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -86,7 +71,7 @@ export default function MemoryPanel({ focus, onFocusChange, highlightId = "" }: 
       document.getElementById(`memory-item-${highlightId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
     }, 100);
     return () => clearTimeout(timer);
-  }, [highlightId, memories, foreshadows, focus]);
+  }, [highlightId, memories, focus]);
 
   const tabBar = (
     <div className="mb-4 flex flex-wrap gap-1 rounded-lg border border-studio-border bg-studio-bg p-1">
@@ -128,24 +113,6 @@ export default function MemoryPanel({ focus, onFocusChange, highlightId = "" }: 
     }
   };
 
-  const saveForeshadow = async () => {
-    if (!editingForeshadow) return;
-    if (!editingForeshadow.description.trim()) {
-      setError("伏笔描述不能为空");
-      return;
-    }
-    setSaving(true);
-    try {
-      await app().UpdateForeshadow(editingForeshadow.id, editingForeshadow.description.trim());
-      setEditingForeshadow(null);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const createMemory = async () => {
     if (!newMemory.subject.trim() || !newMemory.content.trim()) {
       setError("主题和内容不能为空");
@@ -168,16 +135,6 @@ export default function MemoryPanel({ focus, onFocusChange, highlightId = "" }: 
     if (!confirm("归档此记忆？（不会删除，仅不再注入写章上下文）")) return;
     try {
       await app().ArchiveMemory(id);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
-
-  const resolveForeshadow = async (id: string) => {
-    try {
-      await app().ResolveForeshadow(id, resolveChapter);
-      setResolveID("");
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -331,128 +288,6 @@ export default function MemoryPanel({ focus, onFocusChange, highlightId = "" }: 
                   >
                     合并此组冲突
                   </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    );
-  }
-
-  if (focus === "foreshadows" || focus === "resolved") {
-    const isOpen = focus === "foreshadows";
-    const title = isOpen ? "Open 伏笔" : "已回收伏笔";
-    return (
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {tabBar}
-        <h2 className="mb-4 text-sm font-medium text-studio-muted">
-          {title} ({foreshadows.length})
-        </h2>
-        {error && <div className="mb-4 studio-alert-error-compact">{error}</div>}
-        {foreshadows.length === 0 ? (
-          <p className="text-sm text-studio-muted">
-            {isOpen ? "暂无 open 伏笔" : "暂无已回收伏笔"}
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {foreshadows.map((f) => (
-              <li
-                key={f.id}
-                id={`memory-item-${f.id}`}
-                className={`rounded-xl border bg-studio-panel p-4 ${
-                  highlightId === f.id
-                    ? "border-studio-accent ring-2 ring-studio-accent/30"
-                    : "border-studio-border"
-                }`}
-              >
-                {editingForeshadow?.id === f.id ? (
-                  <div className="space-y-2">
-                    <textarea
-                      value={editingForeshadow.description}
-                      onChange={(e) =>
-                        setEditingForeshadow({ ...editingForeshadow, description: e.target.value })
-                      }
-                      rows={3}
-                      className="w-full resize-none rounded border border-studio-border bg-studio-bg px-2 py-1.5 text-sm outline-none"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={saveForeshadow}
-                        disabled={saving}
-                        className="rounded-lg bg-studio-accent px-3 py-1 text-xs text-studio-on-accent disabled:opacity-40"
-                      >
-                        {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "保存"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingForeshadow(null)}
-                        className="text-xs text-studio-muted"
-                      >
-                        取消
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-sm leading-relaxed">{f.description}</p>
-                    <p className="mt-2 text-xs text-studio-muted">
-                      埋设于第 {f.planted_chapter} 章
-                      {!isOpen && f.resolved_chapter > 0 && ` · 回收于第 ${f.resolved_chapter} 章`}
-                      {" · "}
-                      {f.id}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-3">
-                      {isOpen && (
-                        <>
-                          {resolveID === f.id ? (
-                            <div className="flex flex-wrap items-center gap-2">
-                              <input
-                                type="number"
-                                min={1}
-                                value={resolveChapter || ""}
-                                onChange={(e) => setResolveChapter(Number(e.target.value))}
-                                placeholder="回收章号"
-                                className="w-24 rounded border border-studio-border bg-studio-bg px-2 py-1 text-xs outline-none"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => resolveForeshadow(f.id)}
-                                className="inline-flex items-center gap-1 rounded bg-studio-accent px-2 py-1 text-xs text-studio-on-accent"
-                              >
-                                <Check className="h-3 w-3" />
-                                确认
-                              </button>
-                              <button type="button" onClick={() => setResolveID("")} className="text-xs text-studio-muted">
-                                取消
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setResolveID(f.id);
-                                setResolveChapter(f.planted_chapter);
-                              }}
-                              className="inline-flex items-center gap-1 text-xs text-studio-accent hover:underline"
-                            >
-                              <Check className="h-3 w-3" />
-                              标记已回收
-                            </button>
-                          )}
-                        </>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setEditingForeshadow({ ...f })}
-                        className="inline-flex items-center gap-1 text-xs text-studio-muted hover:text-studio-text"
-                      >
-                        <Pencil className="h-3 w-3" />
-                        编辑描述
-                      </button>
-                    </div>
-                  </>
                 )}
               </li>
             ))}

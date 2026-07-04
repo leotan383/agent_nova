@@ -17,7 +17,7 @@ var (
 
 var exportCmd = &cobra.Command{
 	Use:   "export",
-	Short: "导出合集（markdown|epub）",
+	Short: "导出合集（markdown|epub|txt|pdf）",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		actx, err := app.LoadContext(projectRoot)
 		if err != nil {
@@ -41,6 +41,13 @@ var exportCmd = &cobra.Command{
 			if err := export.WriteTXT(actx.Project, out, export.Options{}); err != nil {
 				return err
 			}
+		case "pdf":
+			if out == "" {
+				out = filepath.Join(actx.Project.Root, actx.Project.Meta.Title+".pdf")
+			}
+			if err := export.WritePDF(actx.Project, out, export.Options{}); err != nil {
+				return err
+			}
 		default:
 			if out == "" {
 				out = filepath.Join(actx.Project.Root, "export.md")
@@ -56,5 +63,5 @@ var exportCmd = &cobra.Command{
 
 func init() {
 	exportCmd.Flags().StringVar(&exportOut, "out", "", "输出路径")
-	exportCmd.Flags().StringVar(&exportFormat, "format", "markdown", "格式: markdown|epub|txt")
+	exportCmd.Flags().StringVar(&exportFormat, "format", "markdown", "格式: markdown|epub|txt|pdf")
 }

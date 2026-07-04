@@ -43,6 +43,8 @@ func (a *App) DefaultExportFilename(format string) (string, error) {
 			name = base + ".epub"
 		case "txt":
 			name = base + ".txt"
+		case "pdf":
+			name = base + ".pdf"
 		default:
 			name = base + ".md"
 		}
@@ -67,6 +69,8 @@ func (a *App) PickExportPath(format, defaultName string) (string, error) {
 		filter = runtime.FileFilter{DisplayName: "EPUB 电子书", Pattern: "*.epub"}
 	case "txt":
 		filter = runtime.FileFilter{DisplayName: "纯文本", Pattern: "*.txt"}
+	case "pdf":
+		filter = runtime.FileFilter{DisplayName: "PDF 文档", Pattern: "*.pdf"}
 	}
 	return runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		Title:           "导出小说",
@@ -103,10 +107,12 @@ func (a *App) ExportProject(in ExportInput) (ExportResultDTO, error) {
 			err = export.WriteEPUB(actx.Project, outPath, opts)
 		case "txt":
 			err = export.WriteTXT(actx.Project, outPath, opts)
+		case "pdf":
+			err = export.WritePDF(actx.Project, outPath, opts)
 		case "markdown", "md":
 			err = export.WriteMarkdown(actx.Project, outPath, opts)
 		default:
-			return fmt.Errorf("不支持的格式：%s（可选 markdown/epub/txt）", format)
+			return fmt.Errorf("不支持的格式：%s（可选 markdown/epub/txt/pdf）", format)
 		}
 		if err != nil {
 			return err

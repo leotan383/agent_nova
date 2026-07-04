@@ -370,6 +370,11 @@ export interface MergeMemoriesInput {
   content: string;
 }
 
+export interface SettleMemoryResult {
+  rel_path: string;
+  message: string;
+}
+
 export interface ConsistencySummaryDTO {
   open_foreshadows: number;
   overdue_foreshadows: number;
@@ -718,6 +723,7 @@ interface AppBindings {
   UpdateForeshadow(id: string, description: string): Promise<void>;
   FindMemoryConflicts(): Promise<MemoryConflictDTO[]>;
   MergeMemories(input: MergeMemoriesInput): Promise<void>;
+  SettleMemoryToSetting(memoryID: string): Promise<SettleMemoryResult>;
   LearnFromFeedback(content: string): Promise<LearnResultDTO>;
   RunProjectDoctor(deep: boolean): Promise<DoctorReportDTO>;
   RunPreflight(): Promise<PreflightDTO>;
