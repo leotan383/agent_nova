@@ -82,6 +82,8 @@ desktop/
 | 方法 | 说明 |
 |------|------|
 | `GetStatus` / `GetProjectHealth` | 创作状态 / 健康待办 |
+| `GetDailyWorkflow` / `UpdateWorkflowSettings` | 日更目标、存稿、Streak、今日建议 |
+| `SetChapterStatus` | 章节发布状态 |
 | `ListChapters` / `GetChapterContent` | 章节列表与正文 |
 | `GetChapterDocument` / `SaveChapterDocument` | 正文/审查/摘要读写 |
 | `GetWriteContext` / `GetWriteGate` | 写章上下文与门禁（上下文支持 pin/排除记忆 ID） |

@@ -35,6 +35,41 @@ type Meta struct {
 	Synopsis       string `yaml:"synopsis,omitempty"`      // 故事简介
 	Protagonist    string `yaml:"protagonist,omitempty"` // 主角名或简介
 	Cheat          string `yaml:"cheat,omitempty"`       // 金手指设定摘要
+	DailyWords     int    `yaml:"daily_words,omitempty"`     // 每日字数目标（0=按 daily_chapters×chapter_words）
+	DailyChapters  int    `yaml:"daily_chapters,omitempty"`  // 每日章数目标
+	BufferTarget   int    `yaml:"buffer_target,omitempty"`   // 存稿缓冲目标章数
+}
+
+// DailyWordsGoal 返回每日字数目标。
+func (m Meta) DailyWordsGoal() int {
+	if m.DailyWords > 0 {
+		return m.DailyWords
+	}
+	ch := m.DailyChapters
+	if ch <= 0 {
+		ch = 1
+	}
+	cw := m.ChapterWords
+	if cw <= 0 {
+		cw = DefaultChapterWords
+	}
+	return ch * cw
+}
+
+// DailyChaptersGoal 返回每日章数目标。
+func (m Meta) DailyChaptersGoal() int {
+	if m.DailyChapters > 0 {
+		return m.DailyChapters
+	}
+	return 1
+}
+
+// BufferTargetChapters 返回存稿缓冲目标。
+func (m Meta) BufferTargetChapters() int {
+	if m.BufferTarget > 0 {
+		return m.BufferTarget
+	}
+	return 7
 }
 
 // WritingStyle 返回写作风格，兼容旧字段 tone。

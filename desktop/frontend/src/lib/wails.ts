@@ -155,6 +155,47 @@ export interface ProjectHealthDTO {
   todos: TodoItemDTO[];
 }
 
+export interface CalendarDayDTO {
+  date: string;
+  words: number;
+  chapters: number;
+  goal_met: boolean;
+}
+
+export interface WorkflowSettingsDTO {
+  daily_words: number;
+  daily_chapters: number;
+  buffer_target: number;
+}
+
+export interface DailyWorkflowDTO {
+  today_words: number;
+  today_words_goal: number;
+  today_chapters: number;
+  today_chapters_goal: number;
+  goal_met_today: boolean;
+  current_streak: number;
+  longest_streak: number;
+  buffer_count: number;
+  buffer_ready: number;
+  buffer_target: number;
+  buffer_ok: boolean;
+  calendar: CalendarDayDTO[];
+  suggestions: TodoItemDTO[];
+  settings: WorkflowSettingsDTO;
+}
+
+export interface UpdateWorkflowSettingsInput {
+  daily_words: number;
+  daily_chapters: number;
+  buffer_target: number;
+}
+
+export interface SetChapterStatusInput {
+  chapter: number;
+  status: string;
+}
+
 export interface StartPlanInput {
   volume: number;
 }
@@ -576,6 +617,9 @@ interface AppBindings {
   RevealInFolder(path: string): Promise<void>;
   GetStatus(): Promise<StatusReport>;
   GetProjectHealth(): Promise<ProjectHealthDTO>;
+  GetDailyWorkflow(): Promise<DailyWorkflowDTO>;
+  UpdateWorkflowSettings(input: UpdateWorkflowSettingsInput): Promise<void>;
+  SetChapterStatus(input: SetChapterStatusInput): Promise<void>;
   ListChapters(): Promise<ChapterDTO[]>;
   GetChapterContent(number: number): Promise<string>;
   SaveChapterContent(number: number, content: string): Promise<void>;

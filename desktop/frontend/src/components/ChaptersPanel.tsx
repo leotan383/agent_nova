@@ -1,5 +1,5 @@
 import { FileText, History, PenLine, Wand2 } from "lucide-react";
-import { ChapterDTO, StatusReport } from "../lib/wails";
+import { ChapterDTO, StatusReport, app } from "../lib/wails";
 import ChapterCoachPanel from "./ChapterCoachPanel";
 import ChapterDocumentPanel from "./ChapterDocumentPanel";
 import ChapterStatusBadge from "./ChapterStatusBadge";
@@ -103,6 +103,24 @@ export default function ChaptersPanel({
                     <div className="flex items-center gap-2">
                       <span className="font-medium">第{c.number}章</span>
                       <ChapterStatusBadge status={c.status} compact />
+                      <select
+                        value={(c.status || "reviewed").toLowerCase()}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          void app()
+                            .SetChapterStatus({ chapter: c.number, status: e.target.value })
+                            .then(() => onChapterSaved())
+                            .catch(() => {});
+                        }}
+                        className="ml-auto max-w-[4.5rem] truncate rounded border border-studio-border/60 bg-studio-panel px-1 py-0.5 text-[10px] text-studio-muted"
+                        title="发布状态"
+                      >
+                        <option value="draft">草稿</option>
+                        <option value="reviewed">已审</option>
+                        <option value="scheduled">待发布</option>
+                        <option value="published">已发布</option>
+                      </select>
                     </div>
                     <div className="truncate text-xs text-studio-muted">
                       {c.title || "无标题"} · {c.word_count}字

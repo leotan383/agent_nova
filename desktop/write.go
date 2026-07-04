@@ -13,6 +13,7 @@ import (
 	"github.com/tanlian/agent_nova/internal/pipeline"
 	"github.com/tanlian/agent_nova/internal/report"
 	"github.com/tanlian/agent_nova/internal/usage"
+	"github.com/tanlian/agent_nova/internal/workflow"
 	"github.com/tanlian/agent_nova/internal/workflows"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -263,6 +264,13 @@ func (a *App) runWriteBatch(ctx context.Context, projectRoot, id string, job *wr
 				return nil
 			},
 		})
+		if err == nil && rep != nil && rep.Status == report.StatusDone {
+			wc := 0
+			if ch, e := actx.Store.GetChapter(chapter); e == nil {
+				wc = ch.WordCount
+			}
+			_ = workflow.RecordChapterWritten(actx.Project.Root, wc)
+		}
 		actx.Close()
 
 		if err != nil {

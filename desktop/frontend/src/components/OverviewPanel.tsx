@@ -14,6 +14,7 @@ import {
 import { ConsistencyReportDTO, ProjectHealthDTO, ProjectTokenUsageDTO, StatusReport, app, formatWordCount, phaseLabel } from "../lib/wails";
 import { formatTokenUsage } from "../lib/tokenUsage";
 import OnboardingChecklist from "./OnboardingChecklist";
+import DailyWorkflowCard from "./DailyWorkflowCard";
 import ProjectHealthPanel from "./ProjectHealthPanel";
 import ProjectToolsCard from "./ProjectToolsCard";
 
@@ -64,6 +65,13 @@ export default function OverviewPanel({
         onOpenSettings={onOpenSettings}
         onOpenPlanning={onOpenPlanning}
         onOpenWrite={() => onOpenWrite()}
+      />
+
+      <DailyWorkflowCard
+        refreshKey={healthRefreshKey}
+        onOpenWrite={() => onOpenWrite()}
+        onReviewChapter={onReviewChapter}
+        onOpenChapters={onGoToChapters}
       />
 
       <section className="overflow-hidden rounded-2xl border border-studio-border bg-studio-panel shadow-sm">

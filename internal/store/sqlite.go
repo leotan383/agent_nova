@@ -270,6 +270,16 @@ func (s *Store) GetChapter(n int) (*Chapter, error) {
 	return &ch, nil
 }
 
+// SetChapterStatus 手动设置章节发布状态（published / scheduled / reviewed / draft）。
+func (s *Store) SetChapterStatus(number int, status string) error {
+	ch, err := s.GetChapter(number)
+	if err != nil {
+		return err
+	}
+	ch.Status = status
+	return s.UpsertChapter(*ch)
+}
+
 func (s *Store) ListChapters() ([]Chapter, error) {
 	rows, err := s.db.Query(`SELECT number, title, word_count, path, summary_path, status, updated_at FROM chapters ORDER BY number`)
 	if err != nil {

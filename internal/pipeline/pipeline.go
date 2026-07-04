@@ -194,10 +194,13 @@ func HasReviewReport(p *project.Project, chapter int) bool {
 	return err == nil && strings.TrimSpace(string(data)) != ""
 }
 
-// InferChapterStatus 根据审查报告等推断章节状态（draft / reviewed / published）。
+// InferChapterStatus 根据审查报告等推断章节状态（draft / reviewed / published / scheduled）。
 func InferChapterStatus(p *project.Project, st *store.Store, chapter int) string {
-	if ch, err := st.GetChapter(chapter); err == nil && strings.EqualFold(ch.Status, "published") {
-		return "published"
+	if ch, err := st.GetChapter(chapter); err == nil {
+		s := strings.ToLower(strings.TrimSpace(ch.Status))
+		if s == "published" || s == "scheduled" {
+			return s
+		}
 	}
 	if HasReviewReport(p, chapter) {
 		return "reviewed"
