@@ -57,6 +57,7 @@ export interface CreateNovelInput {
   tone?: string;
   protagonist?: string;
   cheat?: string;
+  inspiration_id?: string;
 }
 
 export const genreOptions = ["玄幻", "都市", "科幻", "仙侠", "历史", "游戏", "悬疑", "其他"] as const;
@@ -266,6 +267,23 @@ export interface OutlineMatrixDTO {
   volume: number;
   rows: OutlineChapterRowDTO[];
   summary: OutlineMatrixSummaryDTO;
+}
+
+export interface VolumeStructureHealthDTO {
+  volume: number;
+  has_outline_file: boolean;
+  summary: OutlineMatrixSummaryDTO;
+}
+
+export interface OutlineStructureHealthDTO {
+  volumes: VolumeStructureHealthDTO[];
+  total: OutlineMatrixSummaryDTO;
+}
+
+export interface ActiveBookEditJobDTO {
+  id: string;
+  kind: string;
+  status: string;
 }
 
 export interface CascadeImpactDTO {
@@ -609,6 +627,12 @@ export interface ActiveEntityHistoryBackfillJobDTO {
   job: EntityHistoryBackfillJobInfo;
 }
 
+export interface SettingFillJobInfo {
+  id: string;
+  setting_id: string;
+  status: string;
+}
+
 export interface AppConfigDTO {
   model: string;
   base_url: string;
@@ -644,6 +668,112 @@ export interface CreateNovelFromDiscoverInput {
   cheat: string;
   synopsis: string;
   enrich: boolean;
+  inspiration_id?: string;
+}
+
+export interface InspirationCard {
+  id: string;
+  title: string;
+  spark: string;
+  spark_preview: string;
+  genre: string;
+  style: string;
+  tags?: string[];
+  status: string;
+  pinned: boolean;
+  archived: boolean;
+  novel_id?: string;
+  novel_title?: string;
+  updated_at: string;
+  created_at: string;
+}
+
+export interface InspirationDTO {
+  id: string;
+  title: string;
+  display_title: string;
+  spark: string;
+  genre: string;
+  style: string;
+  synopsis: string;
+  protagonist: string;
+  cheat: string;
+  tags?: string[];
+  status: string;
+  pinned: boolean;
+  archived: boolean;
+  novel_id?: string;
+  novel_path?: string;
+  novel_title?: string;
+  used_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InspirationPrefillDTO {
+  inspiration_id: string;
+  title: string;
+  genre: string;
+  style: string;
+  synopsis: string;
+  protagonist: string;
+  cheat: string;
+  seed_prompt: string;
+}
+
+export interface InspirationListFilterDTO {
+  query?: string;
+  status?: string;
+  genre?: string;
+  tag?: string;
+  include_archived?: boolean;
+}
+
+export interface CreateInspirationInput {
+  spark: string;
+  title?: string;
+  genre?: string;
+  style?: string;
+  synopsis?: string;
+  protagonist?: string;
+  cheat?: string;
+  tags?: string[];
+}
+
+export interface UpdateInspirationInput {
+  id: string;
+  title: string;
+  spark: string;
+  genre: string;
+  style: string;
+  synopsis: string;
+  protagonist: string;
+  cheat: string;
+  tags?: string[];
+}
+
+export interface InspirationEnrichPreviewDTO {
+  title: string;
+  genre: string;
+  style: string;
+  spark: string;
+  synopsis: string;
+  protagonist: string;
+  cheat: string;
+  tags?: string[];
+  transcript?: string;
+}
+
+export interface ApplyInspirationEnrichInput {
+  id: string;
+  title: string;
+  genre: string;
+  style: string;
+  spark: string;
+  synopsis: string;
+  protagonist: string;
+  cheat: string;
+  tags?: string[];
 }
 
 export interface ExportInput {
@@ -815,6 +945,21 @@ interface AppBindings {
   CreateNovel(input: CreateNovelInput): Promise<NovelCard>;
   PickCreateDirectory(): Promise<string>;
   RevealInFolder(path: string): Promise<void>;
+  ListInspirations(filter: InspirationListFilterDTO): Promise<InspirationCard[]>;
+  GetInspiration(id: string): Promise<InspirationDTO>;
+  GetInspirationPrefill(id: string): Promise<InspirationPrefillDTO>;
+  CreateInspiration(input: CreateInspirationInput): Promise<InspirationDTO>;
+  UpdateInspiration(input: UpdateInspirationInput): Promise<InspirationDTO>;
+  DeleteInspiration(id: string): Promise<void>;
+  SetInspirationPinned(id: string, pinned: boolean): Promise<void>;
+  SetInspirationArchived(id: string, archived: boolean): Promise<void>;
+  EnrichInspirationWithAI(id: string): Promise<InspirationEnrichPreviewDTO>;
+  StartInspirationDiscuss(inspirationId: string): Promise<CoachTurnDTO[]>;
+  SendInspirationDiscussMessage(message: string): Promise<void>;
+  FinishInspirationDiscuss(): Promise<InspirationEnrichPreviewDTO>;
+  ApplyInspirationEnrich(input: ApplyInspirationEnrichInput): Promise<InspirationDTO>;
+  GetInspirationDiscussTurns(): Promise<CoachTurnDTO[] | null>;
+  ClearInspirationDiscuss(): Promise<void>;
   GetStatus(): Promise<StatusReport>;
   GetProjectHealth(): Promise<ProjectHealthDTO>;
   GetDailyWorkflow(): Promise<DailyWorkflowDTO>;
@@ -833,10 +978,13 @@ interface AppBindings {
   GetEntityHistory(entityID: string): Promise<EntityStateSnapshotDTO[]>;
   StartEntityHistoryBackfill(): Promise<EntityHistoryBackfillJobInfo>;
   GetActiveEntityHistoryBackfillJob(): Promise<ActiveEntityHistoryBackfillJobDTO>;
+  StartFillSettingFromPlot(settingID: string): Promise<SettingFillJobInfo>;
+  GetActiveSettingFillJob(): Promise<SettingFillJobInfo>;
+  CancelFillSettingFromPlot(jobID: string): Promise<void>;
   MergeEntityDuplicates(): Promise<number>;
   GetAppConfig(): Promise<AppConfigDTO>;
   SaveAppConfig(input: SaveAppConfigInput): Promise<void>;
-  StartDiscover(seedGenre: string): Promise<CoachTurnDTO[]>;
+  StartDiscover(seedGenre: string, seedPrompt: string): Promise<CoachTurnDTO[]>;
   SendDiscoverMessage(message: string): Promise<void>;
   FinishDiscover(): Promise<DiscoverPreviewDTO>;
   CreateNovelFromDiscover(input: CreateNovelFromDiscoverInput): Promise<NovelCard>;
@@ -914,14 +1062,19 @@ interface AppBindings {
   CreateWikiSetting(input: CreateWikiSettingInput): Promise<WikiContentDTO>;
   ListOutlineVolumes(): Promise<number[]>;
   GetOutlineChapterMatrix(volume: number): Promise<OutlineMatrixDTO>;
+  GetOutlineStructureHealth(): Promise<OutlineStructureHealthDTO>;
   PreviewInsertChapter(input: InsertChapterInput): Promise<ChapterStructurePreviewDTO>;
   PreviewDeleteChapter(chapter: number): Promise<ChapterStructurePreviewDTO>;
   InsertChapterAfter(input: InsertChapterInput): Promise<number>;
   DeleteChapter(input: DeleteChapterInput): Promise<void>;
   StartBookReadReport(input: StartBookReadInput): Promise<BookReadJobInfo>;
   GetBookReadReport(jobID: string): Promise<BookReadReportDTO>;
+  GetActiveBookReadJob(): Promise<ActiveBookEditJobDTO>;
+  CancelBookReadReport(jobID: string): Promise<void>;
   StartBatchPolish(input: StartBatchPolishInput): Promise<BatchPolishJobInfo>;
   GetBatchPolishReport(jobID: string): Promise<BatchPolishReportDTO>;
+  GetActiveBatchPolishJob(): Promise<ActiveBookEditJobDTO>;
+  CancelBatchPolish(jobID: string): Promise<void>;
   ApplyBatchPolishChapter(chapter: number, content: string): Promise<void>;
   PreviewBatchPolishDiff(chapter: number, original: string, polished: string): Promise<DiffResultDTO>;
 }

@@ -22,6 +22,8 @@ type Props = {
   autoSaveMs?: number;
   /** 审查报告等长文：略大字号、更宽行距 */
   relaxed?: boolean;
+  /** 外部注入草稿（如 AI 填充），与 value 不同时应可保存 */
+  injectedDraft?: string | null;
 };
 
 const DEFAULT_AUTO_SAVE_MS = 2000;
@@ -38,9 +40,10 @@ export default function MarkdownEditor({
   autoSave = true,
   autoSaveMs = DEFAULT_AUTO_SAVE_MS,
   relaxed = false,
+  injectedDraft = null,
 }: Props) {
   const [mode, setMode] = useState<ViewMode>("preview");
-  const [draft, setDraft] = useState(value);
+  const [draft, setDraft] = useState(() => injectedDraft ?? value);
   const [error, setError] = useState("");
   const [selection, setSelection] = useState<TextSelection | null>(null);
   const [internalSaving, setInternalSaving] = useState(false);
@@ -59,6 +62,14 @@ export default function MarkdownEditor({
   const selectionEnabled = !!selectionChapter && editable && !!onSave;
 
   useEffect(() => {
+    if (injectedDraft != null) {
+      setDraft(injectedDraft);
+      setMode("preview");
+      setError("");
+      setSelection(null);
+      setSaveStatus("unsaved");
+      return;
+    }
     if (value === prevValueRef.current) return;
     prevValueRef.current = value;
     setDraft(value);
@@ -66,7 +77,7 @@ export default function MarkdownEditor({
     setError("");
     setSelection(null);
     setSaveStatus("idle");
-  }, [value]);
+  }, [value, injectedDraft]);
 
   const dirty = draft !== value;
   const canEdit = editable && !!onSave;

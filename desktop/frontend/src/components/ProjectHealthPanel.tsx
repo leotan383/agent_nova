@@ -11,6 +11,7 @@ import { ProjectHealthDTO, TodoItemDTO, app } from "../lib/wails";
 
 type Props = {
   onPlanVolume: (volume: number) => void;
+  onOpenPlanningMatrix?: (volume: number) => void;
   onOpenWrite: (chapter?: number) => void;
   onRebuildIndex: () => Promise<void>;
   onReviewChapter: (chapter: number) => void;
@@ -27,6 +28,7 @@ const severityStyles: Record<string, string> = {
 
 export default function ProjectHealthPanel({
   onPlanVolume,
+  onOpenPlanningMatrix,
   onOpenWrite,
   onRebuildIndex,
   onReviewChapter,
@@ -73,6 +75,9 @@ export default function ProjectHealthPanel({
         case "review_chapter":
           onReviewChapter(parseInt(todo.action_param || "1", 10) || 1);
           break;
+        case "open_planning_matrix":
+          onOpenPlanningMatrix?.(parseInt(todo.action_param || "1", 10) || 1);
+          break;
         case "open_chapter_review":
           onReviewChapter(parseInt(todo.action_param || "1", 10) || 1);
           break;
@@ -94,6 +99,8 @@ export default function ProjectHealthPanel({
         return "重建索引";
       case "review_chapter":
         return "开始审查";
+      case "open_planning_matrix":
+        return "对照视图";
       case "open_chapter_review":
         return "开始审查";
       default:

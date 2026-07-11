@@ -127,6 +127,15 @@ export default function ChapterStructureDialog({
                 {preview.impact.foreshadows_affected > 0 && (
                   <li>· {preview.impact.foreshadows_affected} 条伏笔章号更新</li>
                 )}
+                {preview.impact.entities_affected > 0 && (
+                  <li>· {preview.impact.entities_affected} 个实体章号更新</li>
+                )}
+                {preview.impact.reviews_affected > 0 && (
+                  <li>· {preview.impact.reviews_affected} 份审查记录章号更新</li>
+                )}
+                {preview.dirs_to_rename?.length > 0 && (
+                  <li>· {preview.dirs_to_rename.length} 个章节目录重命名</li>
+                )}
                 {preview.open_foreshadows_at_target > 0 && mode === "delete" && (
                   <li className="text-amber-600">
                     · {preview.open_foreshadows_at_target} 条开放伏笔埋在此章

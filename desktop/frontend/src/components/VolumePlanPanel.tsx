@@ -6,10 +6,12 @@ import {
   PlanReportDTO,
   ReplanResultDTO,
   VolumeOutlineDTO,
+  ChapterDTO,
   app,
 } from "../lib/wails";
 import { confirmUnsavedLeave } from "../lib/unsavedGuard";
 import ChapterDiffView from "./ChapterDiffView";
+import ChapterStructureDialog from "./ChapterStructureDialog";
 import MarkdownEditor from "./MarkdownEditor";
 import OutlineChapterMatrix from "./OutlineChapterMatrix";
 import BookReadReportPanel from "./BookReadReportPanel";
@@ -20,6 +22,9 @@ type Props = {
   suggestedVolume: number;
   currentChapter?: number;
   focusVolume?: number | null;
+  focusPlanView?: PlanView | null;
+  onFocusApplied?: () => void;
+  chapters?: ChapterDTO[];
   structureRefreshKey?: number;
   onComplete: () => void;
   onOpenChapter?: (chapter: number) => void;
@@ -32,6 +37,9 @@ export default function VolumePlanPanel({
   suggestedVolume,
   currentChapter = 0,
   focusVolume,
+  focusPlanView,
+  onFocusApplied,
+  chapters = [],
   structureRefreshKey = 0,
   onComplete,
   onOpenChapter,
@@ -39,6 +47,9 @@ export default function VolumePlanPanel({
 }: Props) {
   const [planView, setPlanView] = useState<PlanView>("edit");
   const [polishChapters, setPolishChapters] = useState<number[]>([]);
+  const [structureOpen, setStructureOpen] = useState(false);
+  const [structureChapter, setStructureChapter] = useState(0);
+  const [structureHint, setStructureHint] = useState("");
   const [volume, setVolume] = useState(Math.max(1, suggestedVolume));
   const [volumeInput, setVolumeInput] = useState(String(Math.max(1, suggestedVolume)));
   const [outline, setOutline] = useState<VolumeOutlineDTO | null>(null);
@@ -77,9 +88,19 @@ export default function VolumePlanPanel({
         setVolume(focusVolume);
         setVolumeInput(String(focusVolume));
       }
+      if (focusPlanView) {
+        setPlanView(focusPlanView);
+      }
+      onFocusApplied?.();
       panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     })();
-  }, [focusVolume, volume]);
+  }, [focusVolume, focusPlanView, volume, onFocusApplied]);
+
+  useEffect(() => {
+    if (!focusPlanView || (focusVolume && focusVolume > 0)) return;
+    setPlanView(focusPlanView);
+    onFocusApplied?.();
+  }, [focusPlanView, focusVolume, onFocusApplied]);
 
   useEffect(() => {
     app()
@@ -389,11 +410,20 @@ export default function VolumePlanPanel({
 
       {planView === "matrix" && (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {structureHint && (
+            <div className="mb-2 shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+              {structureHint}
+            </div>
+          )}
           <OutlineChapterMatrix
             volume={volume}
             refreshKey={structureRefreshKey}
             onOpenChapter={onOpenChapter}
             onStartReplan={() => void startReplan()}
+            onInsertAfter={(after) => {
+              setStructureChapter(after);
+              setStructureOpen(true);
+            }}
           />
         </div>
       )}
@@ -410,7 +440,7 @@ export default function VolumePlanPanel({
               统一人称、称谓或语气，不改变情节。先勾选章节，预览 diff 后再逐章应用。
             </p>
             <PolishChapterPicker
-              volume={volume}
+              chapters={chapters}
               refreshKey={structureRefreshKey}
               selected={polishChapters}
               onChange={setPolishChapters}
@@ -555,6 +585,18 @@ export default function VolumePlanPanel({
           </div>
         </div>
       )}
+
+      <ChapterStructureDialog
+        open={structureOpen}
+        mode="insert"
+        chapter={structureChapter}
+        onClose={() => setStructureOpen(false)}
+        onDone={() => {
+          setStructureHint("章节结构已更新。卷纲 Markdown 不会自动改章号，建议在对照视图发起 Replan 或手动编辑卷纲。");
+          onStructureChange?.();
+          onComplete();
+        }}
+      />
     </div>
   );
 }

@@ -96,6 +96,7 @@ export default function StudioPage() {
   const [chapterRefreshKey, setChapterRefreshKey] = useState(0);
   const [healthRefreshKey, setHealthRefreshKey] = useState(0);
   const [planFocusVolume, setPlanFocusVolume] = useState<number | null>(null);
+  const [planFocusView, setPlanFocusView] = useState<"edit" | "matrix" | "tools" | null>(null);
   const [autoReviewChapter, setAutoReviewChapter] = useState<number | null>(null);
   const [createSettingOpen, setCreateSettingOpen] = useState(false);
   const [createSettingCategory, setCreateSettingCategory] = useState<SettingCategory>("角色");
@@ -272,10 +273,11 @@ export default function StudioPage() {
     setTab("memory");
   };
 
-  const goToPlanning = async (volume?: number) => {
+  const goToPlanning = async (volume?: number, view?: "edit" | "matrix" | "tools") => {
     const ok = await confirmUnsavedLeave();
     if (!ok) return;
     if (volume && volume > 0) setPlanFocusVolume(volume);
+    if (view) setPlanFocusView(view);
     clearSearchReturn();
     setTab("planning");
   };
@@ -791,7 +793,7 @@ export default function StudioPage() {
                 status={status}
                 healthRefreshKey={healthRefreshKey}
                 onContinueWrite={() => void openWriteMode()}
-                onOpenPlanning={(vol) => void goToPlanning(vol)}
+                onOpenPlanning={(vol, view) => void goToPlanning(vol, view)}
                 onOpenWrite={() => void openWriteMode()}
                 onOpenSettings={() => setSettingsOpen(true)}
                 onRebuildIndex={handleRebuildIndex}
@@ -815,6 +817,12 @@ export default function StudioPage() {
                 suggestedVolume={status.current_volume || 1}
                 currentChapter={status.current_chapter}
                 focusVolume={planFocusVolume}
+                focusPlanView={planFocusView}
+                onFocusApplied={() => {
+                  setPlanFocusVolume(null);
+                  setPlanFocusView(null);
+                }}
+                chapters={chapters}
                 structureRefreshKey={chapterRefreshKey}
                 onComplete={handlePlanComplete}
                 onOpenChapter={(num) => void guardedLoadChapter(num)}

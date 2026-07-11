@@ -60,6 +60,9 @@ func (w *BatchPolishWorkflow) Run(ctx context.Context, p *project.Project, st *s
 	var results []BatchPolishChapterResult
 	total := len(opts.Chapters)
 	for i, ch := range opts.Chapters {
+		if ctx.Err() != nil {
+			return &BatchPolishReport{Rule: rule, Results: results}, ctx.Err()
+		}
 		if onProgress != nil {
 			onProgress(ch, total)
 		}

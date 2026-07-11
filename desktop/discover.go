@@ -44,7 +44,8 @@ type CreateNovelFromDiscoverInput struct {
 	Protagonist  string `json:"protagonist"`
 	Cheat        string `json:"cheat"`
 	Synopsis     string `json:"synopsis"`
-	Enrich       bool   `json:"enrich"`
+	Enrich         bool   `json:"enrich"`
+	InspirationID  string `json:"inspiration_id"`
 }
 
 type discoverSession struct {
@@ -64,8 +65,8 @@ func newDiscoverManager(app *App) *discoverManager {
 	return &discoverManager{app: app}
 }
 
-// StartDiscover 开始 AI 立项探讨（可选 seedGenre）。
-func (a *App) StartDiscover(seedGenre string) ([]CoachTurnDTO, error) {
+// StartDiscover 开始 AI 立项探讨（可选 seedGenre / seedPrompt）。
+func (a *App) StartDiscover(seedGenre string, seedPrompt string) ([]CoachTurnDTO, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, err
@@ -87,10 +88,10 @@ func (a *App) StartDiscover(seedGenre string) ([]CoachTurnDTO, error) {
 		a.discover.mu.Unlock()
 	}()
 
-	msgs := workflows.DiscoverInitialMessages(seedGenre)
+	msgs := workflows.DiscoverInitialMessages(seedGenre, seedPrompt)
 	wf := workflows.NewDiscoverWorkflow(cfg)
 
-	if seedGenre != "" && seedGenre != "玄幻" && len(msgs) > 1 {
+	if len(msgs) > 1 {
 		ctx := context.Background()
 		_, updated, err := wf.DiscoverChat(ctx, msgs[:1], msgs[1].Content, func(phase, delta string) error {
 			a.emitDiscoverStream(phase, delta)
@@ -228,6 +229,7 @@ func (a *App) CreateNovelFromDiscover(in CreateNovelFromDiscoverInput) (library.
 		Dir: in.Dir, Title: in.Title, Genre: in.Genre, Style: in.Style,
 		TargetWords: in.TargetWords, ChapterWords: in.ChapterWords,
 		Protagonist: in.Protagonist, Cheat: in.Cheat, Synopsis: in.Synopsis,
+		InspirationID: in.InspirationID,
 	})
 	if err != nil {
 		return library.NovelCard{}, err

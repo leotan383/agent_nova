@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/tanlian/agent_nova/internal/outline"
 	"github.com/tanlian/agent_nova/internal/project"
 	"github.com/tanlian/agent_nova/internal/store"
 )
@@ -86,6 +87,35 @@ func BuildHealth(p *project.Project, st *store.Store) HealthReport {
 				Action:   "rebuild_index",
 			})
 		}
+	}
+
+	if sh, err := outline.BuildStructureHealth(p, st); err == nil && sh.HasStructureIssues() {
+		issueVol := sh.FirstVolumeWithIssues()
+		if issueVol <= 0 {
+			issueVol = vol
+		}
+		detailParts := []string{}
+		if sh.Total.Unwritten > 0 {
+			detailParts = append(detailParts, fmt.Sprintf("%d 章卷纲未写", sh.Total.Unwritten))
+		}
+		if sh.Total.Deviated > 0 {
+			detailParts = append(detailParts, fmt.Sprintf("%d 章偏离卷纲", sh.Total.Deviated))
+		}
+		if sh.Total.Orphan > 0 {
+			detailParts = append(detailParts, fmt.Sprintf("%d 章仅有正文无卷纲", sh.Total.Orphan))
+		}
+		severity := "warn"
+		if sh.Total.Deviated > 0 {
+			severity = "urgent"
+		}
+		h.Todos = append(h.Todos, TodoItem{
+			ID:          "outline_structure",
+			Label:       "卷纲与正文对照有偏差",
+			Detail:      strings.Join(detailParts, " · "),
+			Severity:    severity,
+			Action:      "open_planning_matrix",
+			ActionParam: fmt.Sprint(max(1, issueVol)),
+		})
 	}
 
 	switch rep.Phase {

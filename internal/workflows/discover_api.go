@@ -22,10 +22,18 @@ func NewDiscoverWorkflow(cfg *config.Config) *DiscoverWorkflow {
 	return &DiscoverWorkflow{Agent: agent.New(agent.Options{Config: cfg})}
 }
 
-// DiscoverInitialMessages 创建探讨会话初始消息；可选 seedGenre 触发首轮顾问回复。
-func DiscoverInitialMessages(seedGenre string) []openai.ChatCompletionMessage {
+// DiscoverInitialMessages 创建探讨会话初始消息；可选 seedGenre / seedPrompt 触发首轮顾问回复。
+func DiscoverInitialMessages(seedGenre, seedPrompt string) []openai.ChatCompletionMessage {
 	msgs := []openai.ChatCompletionMessage{
 		{Role: openai.ChatMessageRoleSystem, Content: prompts.DiscoverSystem()},
+	}
+	seed := strings.TrimSpace(seedPrompt)
+	if seed != "" {
+		msgs = append(msgs, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleUser,
+			Content: seed,
+		})
+		return msgs
 	}
 	g := strings.TrimSpace(seedGenre)
 	if g != "" && g != "玄幻" {

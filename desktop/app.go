@@ -30,11 +30,13 @@ type App struct {
 	plan      planManager
 	review    reviewManager
 	entityHistoryBackfill entityHistoryBackfillManager
+	settingFill           settingFillManager
 	aiDetect  aiDetectManager
 	coach     coachManager
 	revise    reviseManager
 	selection selectionManager
 	discover  discoverManager
+	inspirationDiscuss inspirationDiscussManager
 	bookEdit  bookEditManager
 	session   projectSession
 }
@@ -45,11 +47,13 @@ func NewApp() *App {
 	a.plan = *newPlanManager(a)
 	a.review = *newReviewManager(a)
 	a.entityHistoryBackfill = *newEntityHistoryBackfillManager(a)
+	a.settingFill = *newSettingFillManager(a)
 	a.aiDetect = *newAIDetectManager(a)
 	a.coach = *newCoachManager(a)
 	a.revise = *newReviseManager(a)
 	a.selection = *newSelectionManager(a)
 	a.discover = *newDiscoverManager(a)
+	a.inspirationDiscuss = *newInspirationDiscussManager(a)
 	a.bookEdit = *newBookEditManager(a)
 	return a
 }
@@ -158,6 +162,7 @@ type CreateNovelInput struct {
 	Tone         string `json:"tone"`
 	Protagonist  string `json:"protagonist"`
 	Cheat        string `json:"cheat"`
+	InspirationID string `json:"inspiration_id"`
 }
 
 // CreateNovel 初始化新书并加入书库。
@@ -201,6 +206,7 @@ func (a *App) CreateNovel(in CreateNovelInput) (library.NovelCard, error) {
 	if err != nil {
 		return library.NovelCard{}, err
 	}
+	a.markInspirationUsed(in.InspirationID, library.BuildCard(*e))
 	a.session.invalidate()
 	return library.BuildCard(*e), nil
 }

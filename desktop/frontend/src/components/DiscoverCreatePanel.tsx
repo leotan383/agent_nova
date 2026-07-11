@@ -17,10 +17,19 @@ import {
 type Props = {
   onCreated: () => void;
   onCancel: () => void;
+  inspirationId?: string;
+  seedPrompt?: string;
+  initialGenre?: string;
 };
 
-export default function DiscoverCreatePanel({ onCreated, onCancel }: Props) {
-  const [genre, setGenre] = useState("玄幻");
+export default function DiscoverCreatePanel({
+  onCreated,
+  onCancel,
+  inspirationId = "",
+  seedPrompt = "",
+  initialGenre = "玄幻",
+}: Props) {
+  const [genre, setGenre] = useState(initialGenre || "玄幻");
   const [started, setStarted] = useState(false);
   const [turns, setTurns] = useState<CoachTurnDTO[]>([]);
   const [input, setInput] = useState("");
@@ -36,6 +45,10 @@ export default function DiscoverCreatePanel({ onCreated, onCancel }: Props) {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [turns, streaming]);
+
+  useEffect(() => {
+    if (initialGenre) setGenre(initialGenre);
+  }, [initialGenre]);
 
   useEffect(() => {
     const unsubs = [
@@ -70,7 +83,7 @@ export default function DiscoverCreatePanel({ onCreated, onCancel }: Props) {
     setLoading(true);
     setStreaming("");
     try {
-      const t = await app().StartDiscover(genre);
+      const t = await app().StartDiscover(genre, seedPrompt || "");
       setTurns(t ?? []);
       setStarted(true);
     } catch (e) {
@@ -128,6 +141,7 @@ export default function DiscoverCreatePanel({ onCreated, onCancel }: Props) {
         cheat: preview.cheat,
         synopsis: preview.synopsis,
         enrich,
+        inspiration_id: inspirationId || undefined,
       });
       onCreated();
     } catch (e) {

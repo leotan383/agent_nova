@@ -9,6 +9,8 @@ export type WriteEventPayload = {
   error?: string;
   report?: string;
   content?: string;
+  body?: string;
+  setting_id?: string;
   phase?: string;
   turns?: string;
   batch_complete?: boolean;
@@ -73,6 +75,12 @@ export const DISCOVER_EVENTS = {
   error: "discover:error",
 } as const;
 
+export const INSPIRATION_EVENTS = {
+  stream: "inspiration:stream",
+  done: "inspiration:done",
+  error: "inspiration:error",
+} as const;
+
 export const PLAN_EVENTS = {
   status: "plan:status",
   done: "plan:done",
@@ -108,4 +116,10 @@ export const ENTITY_HISTORY_EVENTS = {
   status: "entity_history:status",
   done: "entity_history:done",
   error: "entity_history:error",
+} as const;
+
+export const SETTING_FILL_EVENTS = {
+  status: "setting_fill:status",
+  done: "setting_fill:done",
+  error: "setting_fill:error",
 } as const;

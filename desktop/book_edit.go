@@ -50,12 +50,26 @@ type OutlineMatrixSummaryDTO struct {
 	Orphan         int `json:"orphan,omitempty"`
 }
 
+// OutlineStructureHealthDTO 全书卷纲 ↔ 正文结构健康。
+type OutlineStructureHealthDTO struct {
+	Volumes []VolumeStructureHealthDTO `json:"volumes"`
+	Total   OutlineMatrixSummaryDTO    `json:"total"`
+}
+
+// VolumeStructureHealthDTO 单卷结构摘要。
+type VolumeStructureHealthDTO struct {
+	Volume         int                     `json:"volume"`
+	HasOutlineFile bool                    `json:"has_outline_file"`
+	Summary        OutlineMatrixSummaryDTO `json:"summary"`
+}
+
 // OutlineMatrixDTO 对照矩阵。
 type OutlineMatrixDTO struct {
-	Volume  int                      `json:"volume"`
-	Rows    []OutlineChapterRowDTO   `json:"rows"`
-	Summary OutlineMatrixSummaryDTO  `json:"summary"`
+	Volume  int                     `json:"volume"`
+	Rows    []OutlineChapterRowDTO  `json:"rows"`
+	Summary OutlineMatrixSummaryDTO `json:"summary"`
 }
+
 
 // CascadeImpactDTO 级联影响。
 type CascadeImpactDTO struct {
@@ -146,6 +160,13 @@ type BatchPolishReportDTO struct {
 	Results []BatchPolishChapterResultDTO `json:"results"`
 }
 
+// ActiveBookEditJobDTO 进行中的全书编辑异步任务。
+type ActiveBookEditJobDTO struct {
+	ID     string `json:"id"`
+	Kind   string `json:"kind"`
+	Status string `json:"status"`
+}
+
 type bookEditJob struct {
 	kind   string
 	status string
@@ -180,7 +201,7 @@ func toMatrixDTO(m outline.Matrix) OutlineMatrixDTO {
 		Summary: OutlineMatrixSummaryDTO{
 			TotalInOutline: m.Summary.TotalInOutline, Written: m.Summary.Written,
 			Unwritten: m.Summary.Unwritten, Deviated: m.Summary.Deviated,
-			Abandoned: m.Summary.Abandoned,
+			Abandoned: m.Summary.Abandoned, Orphan: m.Summary.Orphan,
 		},
 	}
 }
@@ -230,6 +251,45 @@ func (a *App) GetOutlineChapterMatrix(volume int) (OutlineMatrixDTO, error) {
 			return err
 		}
 		out = toMatrixDTO(m)
+		return nil
+	})
+	return out, err
+}
+
+func toStructureHealthDTO(h outline.StructureHealth) OutlineStructureHealthDTO {
+	dto := OutlineStructureHealthDTO{
+		Total: OutlineMatrixSummaryDTO{
+			TotalInOutline: h.Total.TotalInOutline, Written: h.Total.Written,
+			Unwritten: h.Total.Unwritten, Deviated: h.Total.Deviated,
+			Abandoned: h.Total.Abandoned, Orphan: h.Total.Orphan,
+		},
+	}
+	for _, v := range h.Volumes {
+		dto.Volumes = append(dto.Volumes, VolumeStructureHealthDTO{
+			Volume: v.Volume, HasOutlineFile: v.HasOutlineFile,
+			Summary: OutlineMatrixSummaryDTO{
+				TotalInOutline: v.Summary.TotalInOutline, Written: v.Summary.Written,
+				Unwritten: v.Summary.Unwritten, Deviated: v.Summary.Deviated,
+				Abandoned: v.Summary.Abandoned, Orphan: v.Summary.Orphan,
+			},
+		})
+	}
+	return dto
+}
+
+// GetOutlineStructureHealth 全书卷纲 ↔ 正文结构健康摘要。
+func (a *App) GetOutlineStructureHealth() (OutlineStructureHealthDTO, error) {
+	reg, err := a.loadRegistry()
+	if err != nil {
+		return OutlineStructureHealthDTO{}, err
+	}
+	var out OutlineStructureHealthDTO
+	err = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
+		h, err := outline.BuildStructureHealth(actx.Project, actx.Store)
+		if err != nil {
+			return err
+		}
+		out = toStructureHealthDTO(h)
 		return nil
 	})
 	return out, err
@@ -360,8 +420,12 @@ func (a *App) StartBookReadReport(in StartBookReadInput) (BookReadJobInfo, error
 		j := a.bookEdit.jobs[id]
 		if err != nil {
 			if j != nil {
-				j.status = "failed"
-				j.errMsg = err.Error()
+				if ctx.Err() != nil {
+					j.status = "cancelled"
+				} else {
+					j.status = "failed"
+					j.errMsg = err.Error()
+				}
 			}
 		} else if j != nil {
 			j.status = "done"
@@ -369,6 +433,10 @@ func (a *App) StartBookReadReport(in StartBookReadInput) (BookReadJobInfo, error
 		}
 		a.bookEdit.mu.Unlock()
 		if err != nil {
+			if ctx.Err() != nil {
+				a.emitBookReadStatus(id, "cancelled", "已取消")
+				return
+			}
 			a.emitBookReadError(id, err.Error())
 			return
 		}
@@ -454,8 +522,12 @@ func (a *App) StartBatchPolish(in StartBatchPolishInput) (BatchPolishJobInfo, er
 		j := a.bookEdit.jobs[id]
 		if err != nil {
 			if j != nil {
-				j.status = "failed"
-				j.errMsg = err.Error()
+				if ctx.Err() != nil {
+					j.status = "cancelled"
+				} else {
+					j.status = "failed"
+					j.errMsg = err.Error()
+				}
 			}
 		} else if j != nil {
 			j.status = "done"
@@ -463,6 +535,10 @@ func (a *App) StartBatchPolish(in StartBatchPolishInput) (BatchPolishJobInfo, er
 		}
 		a.bookEdit.mu.Unlock()
 		if err != nil {
+			if ctx.Err() != nil {
+				a.emitPolishStatus(id, "cancelled", "已取消")
+				return
+			}
 			a.emitPolishError(id, err.Error())
 			return
 		}
@@ -515,6 +591,70 @@ func (a *App) ApplyBatchPolishChapter(chapter int, content string) error {
 func (a *App) PreviewBatchPolishDiff(chapter int, original, polished string) (DiffResultDTO, error) {
 	diff := workflows.PreviewPolishDiff(chapter, original, polished)
 	return toDiffDTO(diff), nil
+}
+
+// GetActiveBookReadJob 返回进行中的通读任务（若有）。
+func (a *App) GetActiveBookReadJob() (ActiveBookEditJobDTO, error) {
+	a.bookEdit.mu.Lock()
+	defer a.bookEdit.mu.Unlock()
+	for id, j := range a.bookEdit.jobs {
+		if j.kind == "bookread" && (j.status == "running" || j.status == "pending") {
+			return ActiveBookEditJobDTO{ID: id, Kind: j.kind, Status: j.status}, nil
+		}
+	}
+	return ActiveBookEditJobDTO{}, nil
+}
+
+// GetActiveBatchPolishJob 返回进行中的批量润色任务（若有）。
+func (a *App) GetActiveBatchPolishJob() (ActiveBookEditJobDTO, error) {
+	a.bookEdit.mu.Lock()
+	defer a.bookEdit.mu.Unlock()
+	for id, j := range a.bookEdit.jobs {
+		if j.kind == "polish" && (j.status == "running" || j.status == "pending") {
+			return ActiveBookEditJobDTO{ID: id, Kind: j.kind, Status: j.status}, nil
+		}
+	}
+	return ActiveBookEditJobDTO{}, nil
+}
+
+// CancelBookReadReport 取消通读任务。
+func (a *App) CancelBookReadReport(jobID string) error {
+	a.bookEdit.mu.Lock()
+	j, ok := a.bookEdit.jobs[jobID]
+	if !ok || j.kind != "bookread" {
+		a.bookEdit.mu.Unlock()
+		return fmt.Errorf("任务不存在")
+	}
+	if j.status != "running" && j.status != "pending" {
+		a.bookEdit.mu.Unlock()
+		return fmt.Errorf("任务已结束")
+	}
+	cancel := j.cancel
+	a.bookEdit.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	return nil
+}
+
+// CancelBatchPolish 取消批量润色任务。
+func (a *App) CancelBatchPolish(jobID string) error {
+	a.bookEdit.mu.Lock()
+	j, ok := a.bookEdit.jobs[jobID]
+	if !ok || j.kind != "polish" {
+		a.bookEdit.mu.Unlock()
+		return fmt.Errorf("任务不存在")
+	}
+	if j.status != "running" && j.status != "pending" {
+		a.bookEdit.mu.Unlock()
+		return fmt.Errorf("任务已结束")
+	}
+	cancel := j.cancel
+	a.bookEdit.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	return nil
 }
 
 func (a *App) failBookReadJob(id, msg string) {

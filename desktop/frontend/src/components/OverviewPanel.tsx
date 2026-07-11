@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import {
   ConsistencyReportDTO,
+  OutlineStructureHealthDTO,
   ProjectHealthDTO,
   ProjectTokenUsageDTO,
   StatusReport,
@@ -35,7 +36,7 @@ type Props = {
   status: StatusReport;
   healthRefreshKey: number;
   onContinueWrite: () => void;
-  onOpenPlanning: (volume?: number) => void;
+  onOpenPlanning: (volume?: number, view?: "edit" | "matrix" | "tools") => void;
   onOpenWrite: (chapter?: number) => void;
   onOpenSettings: () => void;
   onRebuildIndex: () => Promise<void>;
@@ -196,6 +197,7 @@ export default function OverviewPanel({
           <ProjectHealthPanel
             refreshKey={healthRefreshKey}
             onPlanVolume={(vol) => onOpenPlanning(vol)}
+            onOpenPlanningMatrix={(vol) => onOpenPlanning(vol, "matrix")}
             onOpenWrite={onOpenWrite}
             onRebuildIndex={onRebuildIndex}
             onReviewChapter={onReviewChapter}
@@ -208,6 +210,7 @@ export default function OverviewPanel({
             volume={volume}
             refreshKey={healthRefreshKey}
             onOpenPlanning={onOpenPlanning}
+            onOpenPlanningMatrix={(vol) => onOpenPlanning(vol, "matrix")}
             onGoToMemoryConflicts={onGoToMemoryConflicts}
             onGoToForeshadows={onGoToForeshadows}
             onGoToMemories={onGoToMemories}
@@ -279,30 +282,39 @@ function ProjectStatusCard({
   volume,
   refreshKey,
   onOpenPlanning,
+  onOpenPlanningMatrix,
   onGoToMemoryConflicts,
   onGoToForeshadows,
   onGoToMemories,
 }: {
   volume: number;
   refreshKey: number;
-  onOpenPlanning: (volume?: number) => void;
+  onOpenPlanning: (volume?: number, view?: "edit" | "matrix" | "tools") => void;
+  onOpenPlanningMatrix: (volume: number) => void;
   onGoToMemoryConflicts: () => void;
   onGoToForeshadows: () => void;
   onGoToMemories: () => void;
 }) {
   const [health, setHealth] = useState<ProjectHealthDTO | null>(null);
   const [report, setReport] = useState<ConsistencyReportDTO | null>(null);
+  const [structure, setStructure] = useState<OutlineStructureHealthDTO | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [h, r] = await Promise.all([app().GetProjectHealth(), app().GetConsistencyReport()]);
+      const [h, r, sh] = await Promise.all([
+        app().GetProjectHealth(),
+        app().GetConsistencyReport(),
+        app().GetOutlineStructureHealth(),
+      ]);
       setHealth(h);
       setReport(r);
+      setStructure(sh);
     } catch {
       setHealth(null);
       setReport(null);
+      setStructure(null);
     } finally {
       setLoading(false);
     }
@@ -337,6 +349,17 @@ function ProjectStatusCard({
     if (s.open_foreshadows > 0) return "查看 Open 伏笔";
     return "查看记忆";
   })();
+
+  const st = structure?.total;
+  const hasStructureIssues =
+    (st?.unwritten ?? 0) > 0 || (st?.deviated ?? 0) > 0 || (st?.orphan ?? 0) > 0;
+  const structureVol =
+    structure?.volumes.find(
+      (v) =>
+        v.summary.unwritten > 0 ||
+        v.summary.deviated > 0 ||
+        (v.summary.orphan ?? 0) > 0,
+    )?.volume ?? volume;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-studio-border bg-studio-panel shadow-sm">
@@ -376,6 +399,39 @@ function ProjectStatusCard({
             >
               {ready ? "查看" : "去规划"}
             </button>
+          </div>
+
+          <div className="px-4 py-3.5">
+            <div className="mb-3 flex items-center gap-2">
+              {hasStructureIssues ? (
+                <ShieldAlert className="h-4 w-4 text-[rgb(var(--studio-warning-fg))]" />
+              ) : (
+                <ShieldCheck className="h-4 w-4 text-[rgb(var(--studio-diff-add-stat))]" />
+              )}
+              <span className="text-sm font-medium text-studio-text">结构对照</span>
+              {!hasStructureIssues && st && (
+                <span className="ml-auto text-xs text-[rgb(var(--studio-diff-add-stat))]">卷纲与正文一致</span>
+              )}
+            </div>
+            {st ? (
+              <>
+                <div className="flex gap-2">
+                  <StatusPill label="未写" value={st.unwritten} warn={st.unwritten > 0} />
+                  <StatusPill label="偏离" value={st.deviated} warn={st.deviated > 0} />
+                  <StatusPill label="无卷纲" value={st.orphan ?? 0} warn={(st.orphan ?? 0) > 0} />
+                </div>
+                {hasStructureIssues && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenPlanningMatrix(structureVol)}
+                    className="mt-3 inline-flex w-full items-center justify-center gap-1 rounded-lg border border-studio-border px-3 py-2 text-xs text-studio-text transition hover:bg-studio-bg"
+                  >
+                    打开对照视图
+                    <ChevronRight className="h-3.5 w-3.5 text-studio-muted" />
+                  </button>
+                )}
+              </>
+            ) : null}
           </div>
 
           <div className="px-4 py-3.5">

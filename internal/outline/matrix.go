@@ -39,6 +39,7 @@ type Summary struct {
 	Unwritten      int `json:"unwritten"`
 	Deviated       int `json:"deviated"`
 	Abandoned      int `json:"abandoned"`
+	Orphan         int `json:"orphan"` // 有正文但卷纲无对应条目
 }
 
 // Matrix 卷纲 ↔ 正文对照结果。
@@ -131,6 +132,9 @@ func BuildMatrix(p *project.Project, st *store.Store, volume int) (Matrix, error
 		if row.InOutline {
 			summary.TotalInOutline++
 		}
+		if !row.InOutline && row.HasBody {
+			summary.Orphan++
+		}
 	}
 
 	for _, e := range entries {
@@ -139,13 +143,43 @@ func BuildMatrix(p *project.Project, st *store.Store, volume int) (Matrix, error
 		addRow(row)
 	}
 
+	vols, mins, maxs, err := loadVolumeOutlineBounds(p)
+	if err != nil {
+		return Matrix{}, err
+	}
 	if len(entries) == 0 {
-		vols, mins, maxs, err := loadVolumeOutlineBounds(p)
-		if err != nil {
-			return Matrix{}, err
-		}
 		for _, row := range synthesizeRowsForEmptyOutline(volume, vols, mins, maxs, bodySet, chMap) {
 			addRow(row)
+		}
+	} else {
+		inRow := map[int]struct{}{}
+		for _, r := range rows {
+			inRow[r.Chapter] = struct{}{}
+		}
+		maxBody := 0
+		for n := range bodySet {
+			if n > maxBody {
+				maxBody = n
+			}
+		}
+		bounds := chapterRangeForVolume(volume, vols, mins, maxs, maxBody)
+		for ch := bounds.From; ch <= bounds.To; ch++ {
+			if _, ok := entryByChapter[ch]; ok {
+				continue
+			}
+			if _, ok := inRow[ch]; ok {
+				continue
+			}
+			if _, hasBody := bodySet[ch]; !hasBody {
+				continue
+			}
+			chMeta := chMap[ch]
+			addRow(Row{
+				Volume: volume, Chapter: ch, Title: chMeta.Title,
+				MatchStatus: MatchMatched, HasBody: true,
+				WordCount: chMeta.WordCount, BodyStatus: chMeta.Status,
+				InOutline: false,
+			})
 		}
 	}
 

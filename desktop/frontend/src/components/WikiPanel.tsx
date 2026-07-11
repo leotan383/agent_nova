@@ -7,8 +7,11 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Sparkles,
+  Square,
 } from "lucide-react";
 import { EntityDTO, SettingCategoryDTO, StatusReport, WikiContentDTO, WikiEntryDTO, app } from "../lib/wails";
+import { SETTING_FILL_EVENTS, eventsOn } from "../lib/runtime";
 import {
   META_SYNOPSIS_ID,
   SettingCategory,
@@ -78,6 +81,20 @@ export default function WikiPanel({
   const [saving, setSaving] = useState(false);
   const [categorySubview, setCategorySubview] = useState<CategorySubview>("settings");
   const [createOpen, setCreateOpen] = useState(false);
+  const [hasKey, setHasKey] = useState(true);
+  const [fillRunning, setFillRunning] = useState(false);
+  const [fillJobId, setFillJobId] = useState("");
+  const [fillMessage, setFillMessage] = useState("");
+  const [fillHint, setFillHint] = useState("");
+  const [fillError, setFillError] = useState("");
+  const [aiFilledDraft, setAiFilledDraft] = useState<string | null>(null);
+
+  useEffect(() => {
+    app()
+      .HasAPIKey()
+      .then(setHasKey)
+      .catch(() => setHasKey(false));
+  }, []);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -220,6 +237,82 @@ export default function WikiPanel({
     loadContent(selectedID);
   }, [selectedID, loadContent]);
 
+  useEffect(() => {
+    setFillHint("");
+    setFillMessage("");
+    setFillError("");
+    setAiFilledDraft(null);
+  }, [selectedID]);
+
+  useEffect(() => {
+    void app()
+      .GetActiveSettingFillJob()
+      .then((job) => {
+        if (job.id) {
+          setFillJobId(job.id);
+          setFillRunning(job.status === "running" || job.status === "pending");
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const offs = [
+      eventsOn(SETTING_FILL_EVENTS.status, (p) => {
+        if (p.setting_id && p.setting_id !== selectedID) return;
+        if (p.job_id) setFillJobId(String(p.job_id));
+        setFillRunning(p.status === "running" || p.status === "pending");
+        if (p.message) setFillMessage(String(p.message));
+      }),
+      eventsOn(SETTING_FILL_EVENTS.done, (p) => {
+        if (p.setting_id && p.setting_id !== selectedID) return;
+        setFillRunning(false);
+        const body = String(p.body ?? "");
+        if (body) {
+          setAiFilledDraft(body);
+          setFillHint("已根据正文摘要填充，约 2 秒后自动保存，请核对内容。");
+        }
+        setFillMessage("");
+      }),
+      eventsOn(SETTING_FILL_EVENTS.error, (p) => {
+        if (p.setting_id && p.setting_id !== selectedID) return;
+        setFillRunning(false);
+        setFillError(String(p.error ?? "填充失败"));
+      }),
+    ];
+    return () => offs.forEach((o) => o());
+  }, [selectedID]);
+
+  const startFillFromPlot = async () => {
+    if (!selectedID || !content?.editable || content.kind !== "setting") return;
+    setFillError("");
+    setFillHint("");
+    setFillMessage("准备分析…");
+    try {
+      const job = await app().StartFillSettingFromPlot(selectedID);
+      setFillJobId(job.id);
+      setFillRunning(true);
+    } catch (e) {
+      setFillRunning(false);
+      setFillMessage("");
+      setFillError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const cancelFill = async () => {
+    if (!fillJobId) return;
+    try {
+      await app().CancelFillSettingFromPlot(fillJobId);
+    } catch (e) {
+      setFillError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const canFillSetting =
+    content?.kind === "setting" &&
+    content.editable &&
+    (status?.current_chapter ?? 0) > 0;
+
   const openInFolder = async () => {
     if (!content?.path) return;
     try {
@@ -231,10 +324,15 @@ export default function WikiPanel({
 
   const saveContent = async (body: string) => {
     if (!selectedID) return;
+    const wasAiFill = aiFilledDraft != null;
     setSaving(true);
     try {
       await app().SaveWikiContent(selectedID, body);
       setContent((prev) => (prev ? { ...prev, body } : prev));
+      setAiFilledDraft(null);
+      if (wasAiFill) {
+        setFillHint("已自动保存，请核对内容是否准确。");
+      }
     } finally {
       setSaving(false);
     }
@@ -446,21 +544,62 @@ export default function WikiPanel({
                       {!content.editable && content.kind !== "entity" && " · 只读"}
                     </p>
                   </div>
-                  {content.can_open && content.path && (
-                    <button
-                      type="button"
-                      onClick={openInFolder}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-studio-border px-2.5 py-1.5 text-xs text-studio-muted hover:bg-studio-bg hover:text-studio-text"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      打开文件
-                    </button>
-                  )}
+                  <div className="flex shrink-0 items-center gap-2">
+                    {canFillSetting && (
+                      fillRunning ? (
+                        <button
+                          type="button"
+                          onClick={() => void cancelFill()}
+                          className="inline-flex items-center gap-1 rounded-lg border border-studio-border px-2.5 py-1.5 text-xs text-studio-muted hover:bg-studio-bg hover:text-studio-text"
+                        >
+                          <Square className="h-3.5 w-3.5" />
+                          取消
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={!hasKey}
+                          onClick={() => void startFillFromPlot()}
+                          title="根据已写正文摘要补全空白设定字段"
+                          className="inline-flex items-center gap-1 rounded-lg border border-studio-accent/40 bg-studio-accent/10 px-2.5 py-1.5 text-xs text-studio-accent hover:bg-studio-accent/15 disabled:opacity-40"
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                          AI 填充
+                        </button>
+                      )
+                    )}
+                    {content.can_open && content.path && (
+                      <button
+                        type="button"
+                        onClick={openInFolder}
+                        className="inline-flex items-center gap-1 rounded-lg border border-studio-border px-2.5 py-1.5 text-xs text-studio-muted hover:bg-studio-bg hover:text-studio-text"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        打开文件
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {(fillMessage || fillHint || fillError) && (
+                  <div className="shrink-0 border-b border-studio-border px-4 py-2 text-xs">
+                    {fillRunning && fillMessage && (
+                      <p className="flex items-center gap-2 text-studio-muted">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        {fillMessage}
+                      </p>
+                    )}
+                    {fillHint && <p className="text-[rgb(var(--studio-diff-add-stat))]">{fillHint}</p>}
+                    {fillError && <p className="text-[rgb(var(--studio-danger-fg))]">{fillError}</p>}
+                    {!hasKey && canFillSetting && (
+                      <p className="text-studio-muted">请先在设置中配置 API Key</p>
+                    )}
+                  </div>
+                )}
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   <MarkdownEditor
                     key={selectedID}
                     value={content.body}
+                    injectedDraft={aiFilledDraft}
                     editable={content.editable}
                     saving={saving}
                     onSave={content.editable ? saveContent : undefined}

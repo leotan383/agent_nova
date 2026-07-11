@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import ConfirmDialog from "../components/ConfirmDialog";
 import DiscoverCreatePanel from "../components/DiscoverCreatePanel";
+import InspirationLibraryPanel from "../components/InspirationLibraryPanel";
+import InspirationPicker from "../components/InspirationPicker";
 import NovelCardView from "../components/NovelCard";
 import SettingsDialog from "../components/SettingsDialog";
 import ThemeToggle from "../components/ThemeToggle";
@@ -22,7 +24,9 @@ import {
   libraryStats,
   sortNovels,
 } from "../lib/libraryUtils";
+import { prefillToCreateForm } from "../lib/inspirationUtils";
 import {
+  InspirationPrefillDTO,
   NovelCard,
   app,
   chapterWordOptions,
@@ -68,6 +72,7 @@ type ConfirmState = {
 
 export default function LibraryPage() {
   const navigate = useNavigate();
+  const [pageTab, setPageTab] = useState<"novels" | "inspirations">("novels");
   const [novels, setNovels] = useState<NovelCard[]>([]);
   const [activeId, setActiveId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -86,6 +91,7 @@ export default function LibraryPage() {
   });
   const [filterOpen, setFilterOpen] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [createInspiration, setCreateInspiration] = useState<InspirationPrefillDTO | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
@@ -179,7 +185,32 @@ export default function LibraryPage() {
     setShowCreate(false);
     setCreateMode("discover");
     setForm(defaultCreateForm());
+    setCreateInspiration(null);
     app().ClearDiscover().catch(() => {});
+  };
+
+  const applyInspirationPrefill = (prefill: InspirationPrefillDTO | null) => {
+    setCreateInspiration(prefill);
+    if (!prefill) return;
+    const next = prefillToCreateForm(prefill);
+    setForm((f) => ({
+      ...f,
+      title: next.title,
+      genre: next.genre,
+      style: next.style,
+      synopsis: next.synopsis,
+    }));
+  };
+
+  const openCreateFromInspiration = async (inspirationId: string) => {
+    try {
+      const prefill = await app().GetInspirationPrefill(inspirationId);
+      applyInspirationPrefill(prefill);
+      setCreateMode("form");
+      setShowCreate(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   };
 
   const handleCreate = async () => {
@@ -198,6 +229,7 @@ export default function LibraryPage() {
         target_words: form.targetWords,
         chapter_words: form.chapterWords,
         synopsis: form.synopsis.trim(),
+        inspiration_id: createInspiration?.inspiration_id,
       });
       closeCreate();
       await refresh();
@@ -256,6 +288,34 @@ export default function LibraryPage() {
   return (
     <div className="min-h-full bg-studio-bg">
       <div className="mx-auto max-w-5xl px-6 pb-16 pt-10">
+        <div className="mb-6 flex gap-1 rounded-xl border border-studio-border bg-studio-panel p-1">
+          <button
+            type="button"
+            onClick={() => setPageTab("novels")}
+            className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition ${
+              pageTab === "novels" ? "bg-studio-bg text-studio-accent shadow-sm" : "text-studio-muted"
+            }`}
+          >
+            书库
+          </button>
+          <button
+            type="button"
+            onClick={() => setPageTab("inspirations")}
+            className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition ${
+              pageTab === "inspirations" ? "bg-studio-bg text-studio-accent shadow-sm" : "text-studio-muted"
+            }`}
+          >
+            灵感库
+          </button>
+        </div>
+
+        {pageTab === "inspirations" ? (
+          <InspirationLibraryPanel
+            onCreateNovel={(id) => void openCreateFromInspiration(id)}
+            onOpenNovel={(id) => void openNovel(id)}
+          />
+        ) : (
+          <>
         {/* Header */}
         <header className="mb-8 flex items-start justify-between gap-4">
           <div>
@@ -493,13 +553,21 @@ export default function LibraryPage() {
             </button>
           </div>
         )}
+          </>
+        )}
       </div>
 
-      {/* Create modal — unchanged logic */}
+      {/* Create modal */}
       {showCreate && (
         <div className="studio-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-studio-border bg-studio-panel p-6 shadow-card">
             <h2 className="text-lg font-medium">新建小说</h2>
+            <div className="mt-4">
+              <InspirationPicker
+                selectedId={createInspiration?.inspiration_id || ""}
+                onSelect={applyInspirationPrefill}
+              />
+            </div>
             <div className="mt-4 flex gap-1 rounded-lg border border-studio-border bg-studio-bg p-1">
               <button
                 type="button"
@@ -529,6 +597,9 @@ export default function LibraryPage() {
                     navigate("/studio");
                   }}
                   onCancel={closeCreate}
+                  inspirationId={createInspiration?.inspiration_id}
+                  seedPrompt={createInspiration?.seed_prompt}
+                  initialGenre={createInspiration?.genre || form.genre}
                 />
               </div>
             ) : (

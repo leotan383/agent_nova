@@ -87,6 +87,7 @@ export default function OutlineChapterMatrix({
         </span>
         {s.deviated > 0 && <span className="text-amber-600">· {s.deviated} 偏离</span>}
         {s.unwritten > 0 && <span>· {s.unwritten} 未写</span>}
+        {(s.orphan ?? 0) > 0 && <span>· {s.orphan} 无卷纲</span>}
         <button
           type="button"
           onClick={() => void load()}
