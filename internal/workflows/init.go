@@ -27,6 +27,7 @@ func NewInitWorkflow(cfg *config.Config, root string, st *store.Store) *InitWork
 }
 
 func (w *InitWorkflow) EnrichSettings(ctx context.Context, p *project.Project) (*report.Report, error) {
+	// 读取设定文件
 	var settings []string
 	_ = filepath.Walk(p.SettingsDir(), func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
@@ -39,6 +40,8 @@ func (w *InitWorkflow) EnrichSettings(ctx context.Context, p *project.Project) (
 		settings = append(settings, filepath.ToSlash(rel))
 		return nil
 	})
+
+	// 完善设定文件
 	userPrompt := fmt.Sprintf(`请完善以下设定文件内容（保留 Markdown 结构）：
 书名：%s
 题材：%s
@@ -56,9 +59,11 @@ func (w *InitWorkflow) EnrichSettings(ctx context.Context, p *project.Project) (
 		return nil, err
 	}
 	w.writeSplitFiles(p.Root, content)
+
+	// 生成总纲
 	masterOutline, err := w.Agent.Run(ctx, agent.RunInput{
 		SystemPrompt: prompts.InitSystem(p.Meta.Genre),
-		UserPrompt: fmt.Sprintf(`基于书名《%s》题材%s，生成总纲 Markdown（含分卷规划表）。`, p.Meta.Title, p.Meta.Genre),
+		UserPrompt:   fmt.Sprintf(`基于书名《%s》题材%s，生成总纲 Markdown（含分卷规划表）。`, p.Meta.Title, p.Meta.Genre),
 	})
 	if err != nil {
 		return &report.Report{
@@ -67,9 +72,10 @@ func (w *InitWorkflow) EnrichSettings(ctx context.Context, p *project.Project) (
 		}, nil
 	}
 	_ = os.WriteFile(fmt.Sprintf("%s/大纲/总纲.md", p.Root), []byte(masterOutline), 0o644)
+
 	return &report.Report{
 		Stage: "初始化", Status: report.StatusDone,
-		Summary: fmt.Sprintf("项目《%s》初始化完成", p.Meta.Title),
+		Summary:   fmt.Sprintf("项目《%s》初始化完成", p.Meta.Title),
 		Artifacts: []string{"设定集/", "大纲/总纲.md", "nova.yaml"},
 		NextSteps: []string{"nova plan 1", "nova status"},
 	}, nil
@@ -149,7 +155,7 @@ func (w *PlanWorkflow) PlanVolume(ctx context.Context, p *project.Project, vol i
 	_ = p.Save()
 	return &report.Report{
 		Stage: fmt.Sprintf("卷纲规划 第%d卷", vol), Status: report.StatusDone,
-		Summary: fmt.Sprintf("第 %d 卷纲已生成", vol),
+		Summary:   fmt.Sprintf("第 %d 卷纲已生成", vol),
 		Artifacts: []string{path},
 		NextSteps: []string{fmt.Sprintf("nova write %d", (vol-1)*30+1), "nova plan show " + fmt.Sprint(vol)},
 	}, nil

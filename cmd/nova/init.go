@@ -23,7 +23,7 @@ var (
 	initStyle        string
 	initTargetWords  int
 	initChapterWords int
-	initSynopsis     string
+	initSynopsis     string // 故事简介
 	initTone         string
 	initProtagonist  string
 	initCheat        string
