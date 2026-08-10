@@ -193,7 +193,7 @@ func (a *App) FinishDiscover() (DiscoverPreviewDTO, error) {
 	}
 	style := in.Style
 	if style == "" {
-		style = in.Tone
+		style = "热血"
 	}
 	preview := DiscoverPreviewDTO{
 		Title: in.Title, Genre: in.Genre, Style: style,
@@ -240,7 +240,7 @@ func (a *App) CreateNovelFromDiscover(in CreateNovelFromDiscoverInput) (library.
 		if err == nil {
 			_ = a.session.withActive(reg.ActivePath(), func(actx *app.Context) error {
 				dr := workflows.DiscoverResult{
-					Title: in.Title, Genre: in.Genre, Tone: in.Style,
+					Title: in.Title, Genre: in.Genre, Style: in.Style,
 					Protagonist: in.Protagonist, Cheat: in.Cheat,
 					Pitch: preview.Pitch, Synopsis: in.Synopsis,
 				}

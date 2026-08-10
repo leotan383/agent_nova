@@ -82,7 +82,7 @@ func ExtractDiscoverFromMessages(ctx context.Context, cfg *config.Config, messag
 	in := project.InitInput{
 		Title:       strings.TrimSpace(dr.Title),
 		Genre:       strings.TrimSpace(dr.Genre),
-		Tone:        strings.TrimSpace(dr.Tone),
+		Style:       strings.TrimSpace(dr.Style),
 		Protagonist: strings.TrimSpace(dr.Protagonist),
 		Cheat:       strings.TrimSpace(dr.Cheat),
 		Synopsis:    strings.TrimSpace(dr.Synopsis),
@@ -94,7 +94,7 @@ func ExtractDiscoverFromMessages(ctx context.Context, cfg *config.Config, messag
 		in.Genre = "玄幻"
 	}
 	if in.Style == "" {
-		in.Style = in.Tone
+		in.Style = "热血"
 	}
 	return in, dr, transcript, nil
 }

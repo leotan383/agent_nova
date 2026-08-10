@@ -54,7 +54,6 @@ export interface CreateNovelInput {
   target_words: number;
   chapter_words: number;
   synopsis: string;
-  tone?: string;
   protagonist?: string;
   cheat?: string;
   inspiration_id?: string;

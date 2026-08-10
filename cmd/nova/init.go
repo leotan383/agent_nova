@@ -24,7 +24,6 @@ var (
 	initTargetWords  int
 	initChapterWords int
 	initSynopsis     string // 故事简介
-	initTone         string
 	initProtagonist  string
 	initCheat        string
 	initInteractive  bool
@@ -54,7 +53,7 @@ var initCmd = &cobra.Command{
 		in := project.InitInput{
 			Dir: initDir, Title: initTitle, Genre: initGenre,
 			Style: initStyle, TargetWords: initTargetWords, ChapterWords: initChapterWords,
-			Synopsis: initSynopsis, Tone: initTone,
+			Synopsis: initSynopsis,
 			Protagonist: initProtagonist, Cheat: initCheat, Interactive: initInteractive, SkipLLM: initSkipLLM,
 		}
 
@@ -91,9 +90,6 @@ var initCmd = &cobra.Command{
 		}
 		if in.Genre == "" {
 			in.Genre = "玄幻"
-		}
-		if in.Style == "" && in.Tone != "" {
-			in.Style = in.Tone
 		}
 		if in.Style == "" {
 			in.Style = "热血"
@@ -241,7 +237,6 @@ func init() {
 	initCmd.Flags().IntVar(&initTargetWords, "target-words", project.DefaultTargetWords, "目标总字数")
 	initCmd.Flags().IntVar(&initChapterWords, "chapter-words", project.DefaultChapterWords, "每章目标字数")
 	initCmd.Flags().StringVar(&initSynopsis, "synopsis", "", "故事简介")
-	initCmd.Flags().StringVar(&initTone, "tone", "", "基调（兼容旧参数，等同 --style）")
 	initCmd.Flags().StringVar(&initProtagonist, "protagonist", "", "主角")
 	initCmd.Flags().StringVar(&initCheat, "cheat", "", "金手指")
 	initCmd.Flags().BoolVar(&initInteractive, "interactive", false, "交互式问答（表单式补全字段）")

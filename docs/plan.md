@@ -178,7 +178,7 @@ CurrentChapter > 0 ?
 3. `BookAnchor` 末尾固定附带 `antiDriftRules`（世界观/OOC/伏笔/视角等铁律）。
 4. 输出要求：优先用已附上下文；必须输出完整 Markdown；每章含冲突/爽点/伏笔；可执行、不写「待定」；节奏 3–5 章小高潮、卷末大钩子。
 
-`BookContext` 字段来自 `nova.yaml` 的 `Meta`（`WritingStyle()` 兼容旧字段 `tone`）。
+`BookContext` 字段来自 `nova.yaml` 的 `Meta`（风格取自 `WritingStyle()` → `style`）。
 
 ### 3.6 元数据副作用
 

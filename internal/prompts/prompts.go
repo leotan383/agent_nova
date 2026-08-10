@@ -247,14 +247,14 @@ func DiscoverExtractSystem() string {
 {
   "title": "书名",
   "genre": "题材",
-  "tone": "基调/风格",
+  "style": "写作风格",
   "protagonist": "主角简述",
   "cheat": "金手指/核心设定",
   "pitch": "一句话梗概",
   "synopsis": "故事核心/主要冲突"
 }
 
-字段尽量从对话提取；缺失时可合理推断，genre 默认玄幻。`
+字段尽量从对话提取；缺失时可合理推断，genre 默认玄幻，style 默认热血。`
 }
 
 func InspirationDiscussSystem() string {

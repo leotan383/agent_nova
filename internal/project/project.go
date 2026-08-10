@@ -27,7 +27,6 @@ type Meta struct {
 	Phase          string `yaml:"phase"`           // 创作阶段：empty|init_done|planning|writing|paused
 	CurrentVolume  int    `yaml:"current_volume"`  // 当前进行到的卷号
 	CurrentChapter int    `yaml:"current_chapter"` // 当前已写到的章号
-	Tone           string `yaml:"tone,omitempty"`  // 叙事基调（兼容旧项目）
 	Style          string `yaml:"style,omitempty"` // 写作风格（热血/爽文等）
 	TargetWords    int    `yaml:"target_words,omitempty"`  // 目标总字数
 	ChapterWords   int    `yaml:"chapter_words,omitempty"` // 每章目标字数
@@ -71,12 +70,9 @@ func (m Meta) BufferTargetChapters() int {
 	return 7
 }
 
-// WritingStyle 返回写作风格，兼容旧字段 tone。
+// WritingStyle 返回写作风格。
 func (m Meta) WritingStyle() string {
-	if m.Style != "" {
-		return m.Style
-	}
-	return m.Tone
+	return m.Style
 }
 
 type Project struct {

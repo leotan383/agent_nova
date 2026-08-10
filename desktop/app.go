@@ -159,7 +159,6 @@ type CreateNovelInput struct {
 	TargetWords  int    `json:"target_words"`
 	ChapterWords int    `json:"chapter_words"`
 	Synopsis     string `json:"synopsis"`
-	Tone         string `json:"tone"`
 	Protagonist  string `json:"protagonist"`
 	Cheat        string `json:"cheat"`
 	InspirationID string `json:"inspiration_id"`
@@ -176,8 +175,8 @@ func (a *App) CreateNovel(in CreateNovelInput) (library.NovelCard, error) {
 	if in.Genre == "" {
 		in.Genre = "玄幻"
 	}
-	if in.Style == "" && in.Tone != "" {
-		in.Style = in.Tone
+	if in.Style == "" {
+		in.Style = "热血"
 	}
 	if in.TargetWords <= 0 {
 		in.TargetWords = project.DefaultTargetWords
@@ -188,7 +187,7 @@ func (a *App) CreateNovel(in CreateNovelInput) (library.NovelCard, error) {
 	res, err := project.InitProject(project.InitInput{
 		Dir: in.Dir, Title: strings.TrimSpace(in.Title), Genre: in.Genre,
 		Style: in.Style, TargetWords: in.TargetWords, ChapterWords: in.ChapterWords,
-		Synopsis: in.Synopsis, Tone: in.Tone, Protagonist: in.Protagonist, Cheat: in.Cheat,
+		Synopsis: in.Synopsis, Protagonist: in.Protagonist, Cheat: in.Cheat,
 	})
 	if err != nil {
 		return library.NovelCard{}, err

@@ -18,7 +18,6 @@ type InitInput struct {
 	TargetWords  int    // 目标总字数
 	ChapterWords int    // 每章目标字数
 	Synopsis     string // 故事简介
-	Tone         string // 兼容旧 CLI；未设 Style 时写入 tone
 	Protagonist  string // 主角名或简介，预填主角卡
 	Cheat        string // 金手指设定，预填金手指.md
 	Interactive  bool   // 是否由 CLI 层做交互式问答（本结构体仅传参）
@@ -75,9 +74,6 @@ func InitProject(in InitInput) (*InitResult, error) {
 
 	// 保存项目元数据
 	style := strings.TrimSpace(in.Style)
-	if style == "" {
-		style = strings.TrimSpace(in.Tone)
-	}
 	targetWords := in.TargetWords
 	if targetWords <= 0 {
 		targetWords = DefaultTargetWords
@@ -87,16 +83,15 @@ func InitProject(in InitInput) (*InitResult, error) {
 		chapterWords = DefaultChapterWords
 	}
 	meta := Meta{
-		Title:          in.Title,
-		Genre:          in.Genre,
-		Phase:          PhaseInitDone,
-		Style:          style,
-		Tone:           style,
-		TargetWords:    targetWords,
-		ChapterWords:   chapterWords,
-		Synopsis:       strings.TrimSpace(in.Synopsis),
-		Protagonist:    in.Protagonist,
-		Cheat:          in.Cheat,
+		Title:        in.Title,
+		Genre:        in.Genre,
+		Phase:        PhaseInitDone,
+		Style:        style,
+		TargetWords:  targetWords,
+		ChapterWords: chapterWords,
+		Synopsis:     strings.TrimSpace(in.Synopsis),
+		Protagonist:  in.Protagonist,
+		Cheat:        in.Cheat,
 	}
 	p := &Project{Root: root, Meta: meta}
 	if err := p.Save(); err != nil {

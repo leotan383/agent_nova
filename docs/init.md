@@ -72,7 +72,7 @@ store.Open          InitProject
 
 ```text
 nova init --dir <路径>
-          [--title] [--genre] [--style] [--tone]
+          [--title] [--genre] [--style]
           [--target-words] [--chapter-words]
           [--synopsis] [--protagonist] [--cheat]
           [--interactive | --discover]
@@ -86,7 +86,6 @@ nova init --dir <路径>
 | `--title` | `""` | 书名；非 discover 时必填 |
 | `--genre` | `玄幻` | 题材；决定设定模板集合 |
 | `--style` | `热血` | 写作风格 |
-| `--tone` | `""` | 旧参数；`style` 空时回填 |
 | `--target-words` | `300000` | 目标总字数 |
 | `--chapter-words` | `4000` | 单章目标字数 |
 | `--synopsis` | `""` | 预填总纲「一句话梗概」与 yaml |
@@ -127,7 +126,7 @@ Discover 强制先 `RequireAPIKey`（硬失败）。Interactive 不要求 Key。
 ```
 Title 空（仅 discover 兜底）→ "未命名"
 Genre 空 → "玄幻"
-Style 空 → Tone，再空 → "热血"
+Style 空 → "热血"
 TargetWords ≤0 → 300000
 ChapterWords ≤0 → 4000
 ```
@@ -163,7 +162,7 @@ root = Abs(Dir)
 
 ```yaml
 title / genre / phase: init_done
-style + tone（同值）
+style
 target_words / chapter_words
 synopsis / protagonist / cheat
 # current_volume / current_chapter 默认 0（yaml 零值）
@@ -263,7 +262,7 @@ Walk `设定集/**/*.md`，每文件：
    - `/quit` → 取消，不建项目。
    - `/help` → 打印命令。
 4. 提炼：`DiscoverExtractSystem` + 对话 transcript → JSON → `DiscoverResult`。
-5. 映射为 `InitInput`（title/genre/tone/protagonist/cheat；**不含 synopsis**）。
+5. 映射为 `InitInput`（title/genre/style/protagonist/cheat；**不含 synopsis**）。
 6. 打印摘要，stdin 确认；`n` 则取消。
 
 CLI 强制 `in.Dir = initDir`（探讨结果不带目录）。

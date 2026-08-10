@@ -20,7 +20,7 @@ import (
 type DiscoverResult struct {
 	Title       string `json:"title"`
 	Genre       string `json:"genre"`
-	Tone        string `json:"tone"`
+	Style       string `json:"style"`
 	Protagonist string `json:"protagonist"`
 	Cheat       string `json:"cheat"`
 	Pitch       string `json:"pitch"`
@@ -120,7 +120,7 @@ func extractDiscoverResult(ctx context.Context, ag *agent.Agent, messages []open
 	in := project.InitInput{
 		Title:       strings.TrimSpace(dr.Title),
 		Genre:       strings.TrimSpace(dr.Genre),
-		Tone:        strings.TrimSpace(dr.Tone),
+		Style:       strings.TrimSpace(dr.Style),
 		Protagonist: strings.TrimSpace(dr.Protagonist),
 		Cheat:       strings.TrimSpace(dr.Cheat),
 	}
@@ -130,9 +130,12 @@ func extractDiscoverResult(ctx context.Context, ag *agent.Agent, messages []open
 	if in.Genre == "" {
 		in.Genre = "玄幻"
 	}
+	if in.Style == "" {
+		in.Style = "热血"
+	}
 	fmt.Println()
 	fmt.Println("--- 立项摘要 ---")
-	fmt.Printf("书名：%s\n题材：%s\n基调：%s\n主角：%s\n金手指：%s\n", in.Title, in.Genre, in.Tone, in.Protagonist, in.Cheat)
+	fmt.Printf("书名：%s\n题材：%s\n风格：%s\n主角：%s\n金手指：%s\n", in.Title, in.Genre, in.Style, in.Protagonist, in.Cheat)
 	if dr.Pitch != "" {
 		fmt.Printf("梗概：%s\n", dr.Pitch)
 	}
