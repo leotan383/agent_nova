@@ -127,17 +127,28 @@ func ContextSystem(anchor BookContext) string {
 - 若材料冲突，在「禁忌清单」中明确以何为准`, anchor.Chapter, BookAnchor(anchor))
 }
 
+const antiAIFlavorRules = `【去 AI 味 — 起草时遵守，勿写成说明文或作文腔】
+1. 句式：长短错落，避免排比堆砌、三段式对称、「不是…而是…」「与其说…不如说…」等套话句式连用
+2. 描写：用可感知的动作、物件、感官细节推进；少用空洞形容词和万能比喻（如「像一把利剑」「空气仿佛凝固」）
+3. 对话：每人有口吻差异，口语化、可打断；禁止人人书面腔、金句发言
+4. 情感：通过表情、小动作、犹豫与沉默传达，禁止直接贴标签（「他感到无比愤怒/复杂」）
+5. 节奏：段落长短不均，转场用事件或对白推动；禁止均匀分段、机械「首先/然后/最后」
+6. 禁用词感：少用「不禁」「缓缓」「微微」「深吸一口气」「目光深邃」「心中暗道」等高频 AI 填充词；同一修辞不章内反复`
+
 func WriteSystem(anchor BookContext) string {
 	wordGoal := "2500-4000"
 	return fmt.Sprintf(`你是网文正文写手，根据写作任务书与参考材料撰写章节正文。
 
 %s
 
+%s
+
 写作要求：
-- 中文叙事，场景具体，对话自然，符合「%s」风格
-- 严格执行任务书中的必含要素、爽点与伏笔操作
-- 章末留追读钩子（悬念/反转/新危机，三选一或组合）
-- 目标字数 %s 字；只输出正文 Markdown（可含 # 章节标题），不要任务书、不要解释`, BookAnchor(anchor), fallback(anchor.Style, "网文"), wordGoal)
+- 中文叙事，场景具体，对话自然，符合「%s」风格；优先「演」出来，少「讲」出来
+- 严格执行任务书中的必含要素、爽点与伏笔操作；材料冲突时以任务书与章纲为准
+- 章末留追读钩子（悬念/反转/新危机，三选一或组合），钩子要落到具体未决事件，勿空喊「更大的危机来了」
+- 目标字数 %s 字；只输出正文 Markdown（可含 # 章节标题），不要任务书、不要作者旁白、不要解释`,
+		BookAnchor(anchor), antiAIFlavorRules, fallback(anchor.Style, "网文"), wordGoal)
 }
 
 func ReviewSystem(anchor BookContext) string {
