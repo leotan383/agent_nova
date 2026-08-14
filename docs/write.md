@@ -181,6 +181,8 @@ if opts.Resume {
 
 **#2 正文** — `WriteSystem(anchor)` + `ToWriteUserPrompt(taskBook)`
 
+- System 含 `BookAnchor` + **`antiAIFlavorRules`**（去 AI 味：句式/描写/对话/情感/节奏/填充词黑名单）。
+- 写作约束：演多于讲、材料冲突以任务书与章纲为准、章末钩子落到具体未决事件。
 - 目标字数硬编码 `"2500-4000"`，**不读** `Meta.ChapterWords`。
 - 可 `Stream` + `OnDelta`（无 tools 时走 `runStream`）。
 - 成功后：`ParseChapterTitle`（取首个 `#` 行）→ `SaveChapterWithVersion(..., SourceWriteDraft, "写章起草")`。
@@ -349,12 +351,14 @@ Plan 与 Write 的契约是 **Markdown 标题格式**，不是共享结构化 AP
 | 阶段 | System | Tools | Stream |
 |------|--------|-------|--------|
 | 任务书 | `ContextSystem` + BookAnchor | 否 | 否 |
-| 起草 | `WriteSystem` + BookAnchor | 否 | 可选 |
-| 审查润色 | `ReviewSystem` + BookAnchor | 否 | 否 |
+| 起草 | `WriteSystem` + BookAnchor + `antiAIFlavorRules` | 否 | 可选 |
+| 审查润色 | `ReviewSystem` + BookAnchor（维度含一致性/OOC/节奏/爽点/追读力） | 否 | 否 |
 | 摘要 | `SummarySystem` | 否 | 否 |
-| 提取 | `ExtractSystem` | 否 | 否 |
+| 提取 | `ExtractSystem`（严格 JSON：entities/foreshadows/cool_points/memories） | 否 | 否 |
 
 均通过 `withUsage` 挂同一 `UsageAccumulator`，最终进 Report 与 `usage.AddWriteRun`。
+
+起草阶段的去 AI 味规则与事后 `AIDetectSystem`（`nova` AI 味检测）维度对齐，但前者是**预防写入**，后者是**成稿评估**。
 
 ---
 
@@ -438,6 +442,7 @@ init → plan → 大纲/第NN卷.md + phase=planning
 6. **摘要是硬连续性纽带**：文件缺失直接挡下一章；extract 失败则不挡。
 7. **润色抽取启发式**：依赖模型遵守 `## 润色版正文`；否则回退草稿，可能把报告噪声写入正文（normalize 尽量剥离）。
 8. **Ledger 单文件单章语义弱**：全局一个 `run_ledger.json`，切换章号续跑可能错接步骤。
+9. **去 AI 味前置到起草**：在 `WriteSystem` 注入规则，减少完全依赖事后检测/润色纠偏。
 
 ---
 
